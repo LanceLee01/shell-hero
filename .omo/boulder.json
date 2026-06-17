@@ -1,0 +1,36 @@
+﻿{
+  "schema_version": 2,
+  "active_work_id": "bgm-hum-fix-w1",
+  "works": {
+    "bgm-hum-fix-w1": {
+      "work_id": "bgm-hum-fix-w1",
+      "active_plan": "D:\\opencode\\.omo\\plans\\bgm-hum-fix.md",
+      "plan_name": "bgm-hum-fix",
+      "status": "completed",
+      "started_at": "2026-06-17T13:40:00.000Z",
+      "updated_at": "2026-06-17T13:47:00.000Z",
+      "ended_at": "2026-06-17T13:47:00.000Z",
+      "session_ids": [
+        "opencode:ses_12c45afa6ffeJM0Dc7Es5QIEYB"
+      ],
+      "session_origins": {
+        "opencode:ses_12c45afa6ffeJM0Dc7Es5QIEYB": "direct"
+      },
+      "agent": "atlas",
+      "task_sessions": {}
+    }
+  },
+  "active_plan": "D:\\opencode\\.omo\\plans\\bgm-hum-fix.md",
+  "started_at": "2026-06-17T13:40:00.000Z",
+  "status": "completed",
+  "updated_at": "2026-06-17T13:47:00.000Z",
+  "ended_at": "2026-06-17T13:47:00.000Z",
+  "session_ids": [
+    "opencode:ses_12c45afa6ffeJM0Dc7Es5QIEYB"
+  ],
+  "session_origins": {
+    "opencode:ses_12c45afa6ffeJM0Dc7Es5QIEYB": "direct"
+  },
+  "plan_name": "bgm-hum-fix",
+  "task_sessions": {}
+}
