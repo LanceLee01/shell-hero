@@ -14,15 +14,16 @@ export class BootScene extends Phaser.Scene {
       this.generateTileset(theme)
     }
     this.load.image("player", "assets/player.png")
-    this.load.image("enemy", "assets/enemy.png")
     this.load.image("weapon_pistol", "assets/weapon_pistol.png")
     this.load.image("weapon_smg", "assets/weapon_smg.png")
+    this.load.image("enemy_charger", "assets/enemies/charger.png")
+    this.load.image("enemy_shooter", "assets/enemies/shooter.png")
+    this.load.image("enemy_elite", "assets/enemies/elite.png")
+    this.load.image("boss", "assets/enemies/boss.png")
     this.generateBullets()
     this.generateItems()
     this.generateUI()
     this.generateShotgunTexture()
-    this.generateEnemyTextures()
-    this.generateBossTextures()
     this.generateEnemyBulletTextures()
 
     // Audio: SFX (via SoundManager) + BGM
@@ -36,21 +37,47 @@ export class BootScene extends Phaser.Scene {
     const T = TILE_SIZE
     const c = THEMES[theme]
 
+    // Wall tile (col 0)
     g.fillStyle(c.obstacle, 1)
     g.fillRect(T * TileType.WALL, 0, T, T)
-    g.fillStyle(0x000000, 0.2)
+    // Brick pattern
+    g.lineStyle(1, 0x000000, 0.15)
+    for (let row = 0; row < 4; row++) {
+      const y = row * 8
+      g.lineBetween(T * TileType.WALL, y, T * TileType.WALL + T, y)
+      const offset = row % 2 === 0 ? 0 : 8
+      for (let x = offset; x < T; x += 16) {
+        g.lineBetween(T * TileType.WALL + x, y, T * TileType.WALL + x, y + 8)
+      }
+    }
+    // Bottom shadow
+    g.fillStyle(0x000000, 0.25)
     g.fillRect(T * TileType.WALL + 4, T - 8, T - 8, 4)
 
+    // Floor tile (col 1)
     g.fillStyle(c.ground, 1)
     g.fillRect(T * TileType.FLOOR, 0, T, T)
-    g.fillStyle(c.ground2, 0.4)
+    // Ground texture dots and variation
+    g.fillStyle(c.ground2, 0.5)
     g.fillRect(T * TileType.FLOOR + 6, 8, 8, 4)
     g.fillRect(T * TileType.FLOOR + 20, 20, 6, 3)
+    g.fillRect(T * TileType.FLOOR + 2, 26, 4, 2)
+    g.fillRect(T * TileType.FLOOR + 24, 6, 3, 3)
+    // Subtle edge highlight
+    g.lineStyle(1, 0xffffff, 0.06)
+    g.lineBetween(T * TileType.FLOOR, 0, T * TileType.FLOOR + T, 0)
+    g.lineBetween(T * TileType.FLOOR, 0, T * TileType.FLOOR, T)
 
+    // Corridor tile (col 2)
     g.fillStyle(c.path, 1)
     g.fillRect(T * TileType.CORRIDOR, 0, T, T)
     g.fillStyle(c.path2, 0.5)
     g.fillRect(T * TileType.CORRIDOR + 16, 6, 6, 3)
+    g.fillRect(T * TileType.CORRIDOR + 4, 18, 5, 3)
+    g.fillRect(T * TileType.CORRIDOR + 22, 24, 4, 2)
+    // Path edge highlight
+    g.lineStyle(1, 0xffffff, 0.04)
+    g.lineBetween(T * TileType.CORRIDOR, 0, T * TileType.CORRIDOR + T, 0)
 
     g.generateTexture(`tileset_${theme}`, T * 3, T)
     g.destroy()
@@ -59,18 +86,33 @@ export class BootScene extends Phaser.Scene {
   private generateBullets() {
     const g = this.add.graphics()
 
-    g.fillStyle(0xffeb3b, 1)
+    // Bullet (shotgun) - yellow with bright core
+    g.fillStyle(0xff8800, 1)
     g.fillCircle(4, 4, 4)
+    g.fillStyle(0xffeb3b, 1)
+    g.fillCircle(4, 4, 2.5)
+    g.fillStyle(0xffffff, 0.9)
+    g.fillCircle(4, 4, 1)
     g.generateTexture("bullet", 8, 8)
 
     g.clear()
-    g.fillStyle(0xffcc00, 1)
+    // SMG bullet - dark yellow with golden core
+    g.fillStyle(0xcc8800, 1)
     g.fillCircle(3, 3, 3)
+    g.fillStyle(0xffcc00, 0.9)
+    g.fillCircle(3, 3, 1.5)
+    g.fillStyle(0xffffff, 0.8)
+    g.fillCircle(3, 3, 0.8)
     g.generateTexture("bullet_smg", 6, 6)
 
     g.clear()
-    g.fillStyle(0xffffff, 0.9)
+    // Pistol bullet - light grey with bright white core
+    g.fillStyle(0x999999, 1)
     g.fillCircle(3, 3, 3)
+    g.fillStyle(0xffffff, 0.9)
+    g.fillCircle(3, 3, 1.5)
+    g.fillStyle(0xffffff, 1)
+    g.fillCircle(3, 3, 0.7)
     g.generateTexture("bullet_pistol", 6, 6)
 
     g.destroy()
@@ -79,32 +121,59 @@ export class BootScene extends Phaser.Scene {
   private generateItems() {
     const g = this.add.graphics()
 
-    g.fillStyle(COLORS.HEART, 1)
+    // Health small - heart with cross
+    g.fillStyle(0xcc0033, 1)
     g.fillCircle(8, 8, 8)
-    g.fillStyle(0xffffff, 0.3)
-    g.fillCircle(6, 6, 3)
-    g.generateTexture("item_health_small", 16, 16)
-    g.clear()
     g.fillStyle(COLORS.HEART, 1)
-    g.fillCircle(12, 12, 12)
+    g.fillCircle(8, 8, 6)
+    // Red cross in center
+    g.fillStyle(0xffffff, 0.8)
+    g.fillRect(6, 5, 4, 6)
+    g.fillRect(5, 6, 6, 4)
     g.fillStyle(0xffffff, 0.3)
-    g.fillCircle(9, 9, 4)
+    g.fillCircle(6, 5, 2)
+    g.generateTexture("item_health_small", 16, 16)
+
+    g.clear()
+    // Health large - bigger heart with cross
+    g.fillStyle(0xcc0033, 1)
+    g.fillCircle(12, 12, 12)
+    g.fillStyle(COLORS.HEART, 1)
+    g.fillCircle(12, 12, 10)
+    // Red cross
+    g.fillStyle(0xffffff, 0.8)
+    g.fillRect(9, 7, 6, 10)
+    g.fillRect(7, 9, 10, 6)
+    g.fillStyle(0xffffff, 0.3)
+    g.fillCircle(9, 8, 3)
     g.generateTexture("item_health_large", 24, 24)
 
     g.clear()
-    g.fillStyle(COLORS.GOLD, 1)
+    // Gold coin with star symbol
+    g.fillStyle(0xcc8800, 1)
     g.fillCircle(6, 6, 6)
-    g.fillStyle(0xffffff, 0.4)
+    g.fillStyle(COLORS.GOLD, 1)
+    g.fillCircle(6, 6, 5)
+    g.fillStyle(0xffffff, 0.5)
     g.fillCircle(4, 4, 2)
+    // Star/diamond symbol
+    g.fillStyle(0xcc8800, 0.9)
+    g.fillRect(5, 3, 2, 6)
+    g.fillRect(3, 5, 6, 2)
     g.generateTexture("item_gold_coin", 12, 12)
 
     g.clear()
-    g.fillStyle(0x00ff88, 1)
+    // XP orb - layered diamond with glow
+    g.fillStyle(0x00aa66, 1)
     g.beginPath()
     g.moveTo(6, 0); g.lineTo(12, 6); g.lineTo(6, 12); g.lineTo(0, 6)
     g.closePath(); g.fillPath()
-    g.fillStyle(0x88ffcc, 0.6)
-    g.fillCircle(6, 6, 3)
+    g.fillStyle(0x00ff88, 1)
+    g.beginPath()
+    g.moveTo(6, 2); g.lineTo(10, 6); g.lineTo(6, 10); g.lineTo(2, 6)
+    g.closePath(); g.fillPath()
+    g.fillStyle(0x88ffcc, 0.7)
+    g.fillCircle(6, 6, 2.5)
     g.generateTexture("item_xp", 12, 12)
 
     g.destroy()
@@ -112,16 +181,34 @@ export class BootScene extends Phaser.Scene {
 
   private generateShotgunTexture() {
     const g = this.add.graphics()
+    // Body
     g.fillStyle(0x444444, 1)
     g.fillRect(0, 0, 48, 10)
-    g.fillStyle(0x555555, 1)
+    // Metallic highlight
+    g.fillStyle(0x666666, 1)
     g.fillRect(6, 1, 36, 8)
+    // Barrel end
+    g.fillStyle(0x888888, 0.6)
+    g.fillRect(40, 1, 4, 8)
+    // Wood grip
     g.fillStyle(0x663300, 1)
-    g.fillRect(42, 1, 6, 8)
+    g.fillRect(0, 1, 8, 8)
+    g.fillStyle(0x884400, 0.5)
+    g.fillRect(1, 1, 6, 4)
+    // Trigger guard
     g.fillStyle(0x333333, 1)
-    g.fillRect(2, 3, 6, 4)
+    g.fillRect(8, 2, 4, 6)
+    g.fillStyle(0x444444, 0.5)
+    g.fillRect(9, 2, 2, 5)
+    // Barrel detail
     g.fillStyle(0x555555, 1)
-    g.fillRect(12, 2, 8, 6)
+    g.fillRect(14, 2, 24, 6)
+    g.lineStyle(1, 0x777777, 0.4)
+    g.lineBetween(14, 4, 38, 4)
+    g.lineBetween(14, 7, 38, 7)
+    // Muzzle
+    g.fillStyle(0x888888, 0.8)
+    g.fillRect(44, 2, 4, 6)
     g.generateTexture("weapon_shotgun", 48, 10)
     g.destroy()
   }
@@ -129,63 +216,15 @@ export class BootScene extends Phaser.Scene {
   private generateUI() {
     const g = this.add.graphics()
 
-    g.fillStyle(COLORS.UI_BG, 0.7)
+    g.fillStyle(COLORS.UI_BG, 0.85)
     g.fillRoundedRect(0, 0, 220, 36, 6)
+    // Border highlight
+    g.lineStyle(1, 0x4fc3f7, 0.3)
+    g.strokeRoundedRect(0, 0, 220, 36, 6)
+    // Inner highlight
+    g.lineStyle(1, 0xffffff, 0.08)
+    g.strokeRoundedRect(2, 2, 216, 32, 5)
     g.generateTexture("ui_weapon_bar", 220, 36)
-
-    g.destroy()
-  }
-
-  private generateEnemyTextures() {
-    const g = this.add.graphics()
-
-    // Charger: small enemy (16x16)
-    g.fillStyle(0xff8800, 1)
-    g.fillCircle(8, 8, 8)
-    g.fillStyle(0xcc6600, 1)
-    g.fillCircle(8, 8, 5)
-    g.generateTexture("enemy_charger", 16, 16)
-
-    g.clear()
-
-    // Shooter: medium enemy (20x20)
-    g.fillStyle(0xaa44ff, 1)
-    g.fillCircle(10, 10, 10)
-    g.fillStyle(0x8833cc, 1)
-    g.fillCircle(10, 10, 6)
-    g.generateTexture("enemy_shooter", 20, 20)
-
-    g.clear()
-
-    // Elite: large enemy (32x32)
-    g.fillStyle(0xff0044, 1)
-    g.fillCircle(16, 16, 16)
-    g.fillStyle(0xcc0033, 1)
-    g.fillCircle(16, 16, 10)
-    g.lineStyle(2, 0xff4488, 0.6)
-    g.strokeCircle(16, 16, 18)
-    g.generateTexture("enemy_elite", 32, 32)
-
-    g.destroy()
-  }
-
-  private generateBossTextures() {
-    const g = this.add.graphics()
-
-    // Boss: large dark purple hexagon with glow border
-    g.fillStyle(0x4a0080, 1)
-    g.beginPath()
-    for (let i = 0; i < 6; i++) {
-      const angle = (Math.PI / 3) * i - Math.PI / 6
-      const x = 20 + 20 * Math.cos(angle)
-      const y = 20 + 20 * Math.sin(angle)
-      if (i === 0) g.moveTo(x, y)
-      else g.lineTo(x, y)
-    }
-    g.closePath(); g.fillPath()
-    g.lineStyle(3, 0x8844cc, 1)
-    g.strokePath()
-    g.generateTexture("boss", 40, 40)
 
     g.destroy()
   }
@@ -193,8 +232,12 @@ export class BootScene extends Phaser.Scene {
   private generateEnemyBulletTextures() {
     const g = this.add.graphics()
 
-    g.fillStyle(0xff4444, 1)
+    g.fillStyle(0xcc0033, 1)
     g.fillCircle(3, 3, 3)
+    g.fillStyle(0xff4444, 1)
+    g.fillCircle(3, 3, 2)
+    g.fillStyle(0xff8888, 0.7)
+    g.fillCircle(3, 3, 1)
     g.generateTexture("bullet_enemy", 6, 6)
 
     g.destroy()

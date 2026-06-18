@@ -1,4 +1,5 @@
 ﻿import Phaser from "phaser"
+import { GAME_WIDTH, GAME_HEIGHT } from "@/config"
 import { MapTheme, THEMES } from "@/systems/MapThemes"
 import { loadSave, saveSave, SaveData, SaveSlot, getActiveSlot, switchSlot, createSlot, deleteSlot } from "@/systems/TalentDefs"
 import { SoundManager } from "@/systems/SoundManager"
@@ -17,16 +18,16 @@ export class MapSelectScene extends Phaser.Scene {
     this.soundManager.playBGM("bgm_menu")
     this.cameras.main.setBackgroundColor(0x111122)
 
-    this.add.text(480, 30, "选择地图", {
+    this.add.text(GAME_WIDTH / 2, 40, "选择地图", {
       fontSize: "28px", color: "#ffffff", fontFamily: "monospace", fontStyle: "bold",
     }).setOrigin(0.5)
 
     const activeSlot = getActiveSlot(this.save)
-    this.add.text(480, 65, "晶石: " + activeSlot.crystals, {
+    this.add.text(GAME_WIDTH / 2, 75, "晶石: " + activeSlot.crystals, {
       fontSize: "14px", color: "#ffd700", fontFamily: "monospace",
     }).setOrigin(0.5)
 
-    const talentBtn = this.add.text(860, 30, "天赋树", {
+    const talentBtn = this.add.text(GAME_WIDTH - 20, 40, "天赋树", {
       fontSize: "16px", color: "#4fc3f7", fontFamily: "monospace",
     }).setOrigin(1, 0).setInteractive({ useHandCursor: true })
     talentBtn.on("pointerover", () => talentBtn.setColor("#ffffff"))
@@ -42,8 +43,8 @@ export class MapSelectScene extends Phaser.Scene {
     const cardH = 200
     const gapX = 40
     const gapY = 30
-    const startX = 480 - (cols * cardW + (cols - 1) * gapX) / 2
-    const startY = 180
+    const startX = GAME_WIDTH / 2 - (cols * cardW + (cols - 1) * gapX) / 2
+    const startY = 200
 
     themes.forEach((theme, i) => {
       const col = i % cols
@@ -59,8 +60,8 @@ export class MapSelectScene extends Phaser.Scene {
     const slotW = 160
     const slotH = 80
     const gap = 20
-    const startX = 480 - (this.save.slots.length * (slotW + gap)) / 2
-    const startY = 100
+    const startX = GAME_WIDTH / 2 - (this.save.slots.length * (slotW + gap)) / 2
+    const startY = 110
 
     this.save.slots.forEach((slot, i) => {
       const cx = startX + i * (slotW + gap) + slotW / 2

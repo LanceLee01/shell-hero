@@ -1,4 +1,5 @@
 ﻿import Phaser from "phaser"
+import { GAME_WIDTH, GAME_HEIGHT } from "@/config"
 import { TALENTS, loadSave, saveSave, getActiveSlot, SaveSlot, getTalentLevel } from "@/systems/TalentDefs"
 
 export class TalentScene extends Phaser.Scene {
@@ -14,11 +15,11 @@ export class TalentScene extends Phaser.Scene {
     this.save = loadSave()
     this.cameras.main.setBackgroundColor(0x111122)
 
-    this.add.text(480, 40, "天赋树", {
+    this.add.text(GAME_WIDTH / 2, 50, "天赋树", {
       fontSize: "28px", color: "#4fc3f7", fontFamily: "monospace", fontStyle: "bold",
     }).setOrigin(0.5)
 
-    this.crystalText = this.add.text(480, 78, "晶石: 0", {
+    this.crystalText = this.add.text(GAME_WIDTH / 2, 88, "晶石: 0", {
       fontSize: "16px", color: "#ffd700", fontFamily: "monospace",
     }).setOrigin(0.5)
     this.updateCrystalText()
@@ -26,7 +27,7 @@ export class TalentScene extends Phaser.Scene {
     this.talentContainer = this.add.container(0, 0)
     this.renderTalents()
 
-    const back = this.add.text(60, 600, "< 返回", {
+    const back = this.add.text(60, GAME_HEIGHT - 40, "< 返回", {
       fontSize: "16px", color: "#aaaacc", fontFamily: "monospace",
     }).setInteractive({ useHandCursor: true })
     back.on("pointerover", () => back.setColor("#ffffff"))
@@ -50,8 +51,8 @@ export class TalentScene extends Phaser.Scene {
     TALENTS.forEach((t, i) => {
       const col = i % 3
       const row = Math.floor(i / 3)
-      const cx = 160 + col * 320
-      const cy = 170 + row * 150
+      const cx = GAME_WIDTH / 8 + col * GAME_WIDTH / 4
+      const cy = 200 + row * 160
 
       const level = getTalentLevel(slot, t.id)
       const maxed = level >= t.maxLevel

@@ -5,10 +5,10 @@ let mainWindow
 
 function createWindow() {
   mainWindow = new BrowserWindow({
-    width: 960,
-    height: 680,
-    minWidth: 480,
-    minHeight: 340,
+    width: 1280,
+    height: 860,
+    minWidth: 640,
+    minHeight: 360,
     resizable: true,
     fullscreenable: true,
     autoHideMenuBar: true,

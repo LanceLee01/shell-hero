@@ -1,5 +1,5 @@
-export const GAME_WIDTH = 960
-export const GAME_HEIGHT = 640
+export const GAME_WIDTH = 1280
+export const GAME_HEIGHT = 720
 export const TILE_SIZE = 32
 
 export const PLAYER = {

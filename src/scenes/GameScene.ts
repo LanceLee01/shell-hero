@@ -1,5 +1,5 @@
 ﻿import Phaser from "phaser"
-import { TILE_SIZE, PLAYER, DODGE, COLORS } from "@/config"
+import { TILE_SIZE, PLAYER, DODGE, COLORS, GAME_WIDTH, GAME_HEIGHT } from "@/config"
 import { MAP_WIDTH, MAP_HEIGHT, TileType } from "@/map/types"
 import { EnemyType, ENEMY_LIST, ENEMY_DEFS, EnemyConfig } from "@/systems/EnemyDefs"
 import { WeaponId, WEAPON_LIST } from "@/systems/WeaponDefs"
@@ -72,6 +72,7 @@ export class GameScene extends Phaser.Scene {
   private bossHPBarText!: Phaser.GameObjects.Text
 
   private soundManager!: SoundManager
+  private damageOverlay!: Phaser.GameObjects.Graphics
 
   constructor() {
     super("GameScene")
@@ -146,6 +147,7 @@ export class GameScene extends Phaser.Scene {
     this.createHUD()
     this.setupCollisions()
     this.setupCamera()
+    this.createDamageOverlay()
 
     this.time.delayedCall(1500, () => this.startNextWave())
   }
@@ -236,7 +238,7 @@ export class GameScene extends Phaser.Scene {
     const centerY = Math.floor(MAP_HEIGHT / 2) * TILE_SIZE
 
     this.boss = this.physics.add.sprite(centerX, centerY, "boss") as Phaser.Physics.Arcade.Sprite
-    this.boss.setCircle(20, 0, 0)
+    this.boss.setCircle(22, 4, 0)
     this.boss.setDepth(8)
     this.boss.setData("isBoss", true)
 
@@ -380,20 +382,20 @@ export class GameScene extends Phaser.Scene {
   }
 
   private createHUD() {
-    this.uiWeaponBg = this.add.image(130, 620, "ui_weapon_bar").setDepth(100).setScrollFactor(0)
+    this.uiWeaponBg = this.add.image(130, GAME_HEIGHT - 20, "ui_weapon_bar").setDepth(100).setScrollFactor(0)
     for (let i = 0; i < WEAPON_LIST.length; i++) {
       const w = WEAPON_LIST[i]
       this.uiWeaponLabels.push(
-        this.add.text(26 + i * 73, 613, `${i + 1} ${w.name}`, {
+        this.add.text(26 + i * 73, GAME_HEIGHT - 27, `${i + 1} ${w.name}`, {
           fontSize: "13px", color: "#ffffff", fontFamily: "monospace",
         }).setDepth(101).setScrollFactor(0),
       )
     }
-    this.uiResources = this.add.text(860, 613, "", {
+    this.uiResources = this.add.text(GAME_WIDTH - 20, GAME_HEIGHT - 27, "", {
       fontSize: "13px", color: "#ffd700", fontFamily: "monospace",
     }).setDepth(101).setScrollFactor(0).setOrigin(1, 0)
 
-    this.uiWaveText = this.add.text(480, 300, "", {
+    this.uiWaveText = this.add.text(GAME_WIDTH / 2, GAME_HEIGHT / 2 - 60, "", {
       fontSize: "32px", color: "#ffffff", fontFamily: "monospace", fontStyle: "bold",
     }).setDepth(102).setScrollFactor(0).setOrigin(0.5).setAlpha(0)
 
@@ -419,6 +421,31 @@ export class GameScene extends Phaser.Scene {
     this.physics.world.setBounds(0, 0, worldW, worldH)
     this.cameras.main.setBounds(0, 0, worldW, worldH)
     this.cameras.main.startFollow(this.player, true, 0.08, 0.08)
+  }
+
+  private createDamageOverlay() {
+    this.damageOverlay = this.add.graphics().setDepth(300).setScrollFactor(0)
+    this.damageOverlay.fillStyle(0xff0000, 0)
+    this.damageOverlay.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT)
+  }
+
+  private flashDamageOverlay() {
+    this.tweens.killTweensOf(this.damageOverlay)
+    this.damageOverlay.clear()
+    this.damageOverlay.fillStyle(0xff0000, 0.25)
+    this.damageOverlay.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT)
+    this.tweens.add({
+      targets: this.damageOverlay,
+      alpha: { from: 1, to: 0 },
+      duration: 300,
+      ease: "Power2",
+      onComplete: () => {
+        this.damageOverlay.clear()
+        this.damageOverlay.fillStyle(0xff0000, 0)
+        this.damageOverlay.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT)
+        this.damageOverlay.setAlpha(1)
+      },
+    })
   }
 
   update(_time: number, delta: number) {
@@ -777,6 +804,7 @@ export class GameScene extends Phaser.Scene {
     if (this.invincible || this.isDodging || this.upgradeActive) return
     this.playerHP -= 10 + Math.floor(this.waveNumber / 2)
     this.soundManager.playSFX(SoundKey.PLAYER_HURT)
+    this.flashDamageOverlay()
     this.cameras.main.shake(100, 0.005)
     this.invincible = true
     this.flashSprite(this.player)
@@ -802,6 +830,7 @@ export class GameScene extends Phaser.Scene {
     bulletBody.enable = false
     this.playerHP -= 5
     this.soundManager.playSFX(SoundKey.PLAYER_HURT)
+    this.flashDamageOverlay()
     this.invincible = true
     this.player.setAlpha(0.5)
     if (this.playerHP <= 0) {
@@ -909,23 +938,39 @@ export class GameScene extends Phaser.Scene {
 
     const overlay = this.add.graphics().setDepth(200).setScrollFactor(0)
     overlay.fillStyle(0x000000, 0.6)
-    overlay.fillRect(0, 0, 960, 640)
+    overlay.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT)
     this.upgradeElements.push(overlay)
 
     const panel = this.add.graphics().setDepth(201).setScrollFactor(0)
     panel.fillStyle(0x1a1a2e, 0.95)
-    panel.fillRoundedRect(180, 160, 600, 320, 16)
+    panel.fillRoundedRect(GAME_WIDTH / 2 - 300, GAME_HEIGHT / 2 - 160, 600, 320, 16)
     panel.lineStyle(2, 0x4fc3f7, 1)
-    panel.strokeRoundedRect(180, 160, 600, 320, 16)
+    panel.strokeRoundedRect(GAME_WIDTH / 2 - 300, GAME_HEIGHT / 2 - 160, 600, 320, 16)
     this.upgradeElements.push(panel)
 
-    const title = this.add.text(480, 190, "升级选择", {
+    // Decorative glow corners
+    const glowPositions = [
+      [GAME_WIDTH / 2 - 300, GAME_HEIGHT / 2 - 160],
+      [GAME_WIDTH / 2 + 300, GAME_HEIGHT / 2 - 160],
+      [GAME_WIDTH / 2 - 300, GAME_HEIGHT / 2 + 160],
+      [GAME_WIDTH / 2 + 300, GAME_HEIGHT / 2 + 160],
+    ]
+    for (const [gx, gy] of glowPositions) {
+      const glow = this.add.circle(gx, gy, 6, 0x4fc3f7, 0.6).setDepth(202).setScrollFactor(0)
+      this.tweens.add({
+        targets: glow, alpha: { from: 0.6, to: 0.1 }, scale: { from: 1, to: 1.5 },
+        duration: 1200 + Math.random() * 400, yoyo: true, repeat: -1, ease: "Sine.easeInOut",
+      })
+      this.upgradeElements.push(glow)
+    }
+
+    const title = this.add.text(GAME_WIDTH / 2, GAME_HEIGHT / 2 - 130, "升级选择", {
       fontSize: "24px", color: "#4fc3f7", fontFamily: "monospace", fontStyle: "bold",
     }).setOrigin(0.5).setDepth(202).setScrollFactor(0)
     this.upgradeElements.push(title)
 
     options.forEach((opt, i) => {
-      const cx = 240 + i * 200; const cy = 340
+      const cx = GAME_WIDTH / 2 + (i - 1) * 200; const cy = GAME_HEIGHT / 2 + 20
 
       const cardBg = this.add.graphics().setDepth(202).setScrollFactor(0)
       this.drawCardBg(cardBg, cx, cy, false)
@@ -958,6 +1003,22 @@ export class GameScene extends Phaser.Scene {
         this.destroyUpgradeUI()
       })
     })
+
+    // Keyboard shortcuts: A / S / D for options 0 / 1 / 2
+    const keyA = this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.A)
+    const keyS = this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.S)
+    const keyD = this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.D)
+
+    const onKey = (i: number) => {
+      if (options[i]) {
+        this.applyUpgrade(options[i].id)
+        this.destroyUpgradeUI()
+      }
+    }
+    keyA.once("down", () => onKey(0))
+    keyS.once("down", () => onKey(1))
+    keyD.once("down", () => onKey(2))
+    this.upgradeElements.push({ destroy: () => { keyA.removeAllListeners(); keyS.removeAllListeners(); keyD.removeAllListeners() } } as any)
   }
 
   private drawCardBg(g: Phaser.GameObjects.Graphics, cx: number, cy: number, hover: boolean) {
@@ -1040,12 +1101,12 @@ export class GameScene extends Phaser.Scene {
     this.uiResources.setText(`Lv${this.level} HP:${this.playerHP} G:${this.gold}`)
     this.uiXpBar.clear()
     this.uiXpBar.fillStyle(0x333333, 0.8)
-    this.uiXpBar.fillRect(8, 606, 200, 8)
+    this.uiXpBar.fillRect(10, GAME_HEIGHT - 34, 200, 8)
     const r = this.xpToNext > 0 ? this.xp / this.xpToNext : 0
     this.uiXpBar.fillStyle(0x00ff88, 1)
-    this.uiXpBar.fillRect(8, 606, 200 * Math.min(1, r), 8)
+    this.uiXpBar.fillRect(10, GAME_HEIGHT - 34, 200 * Math.min(1, r), 8)
     this.uiXpBar.lineStyle(1, 0x555555, 0.5)
-    this.uiXpBar.strokeRect(8, 606, 200, 8)
+    this.uiXpBar.strokeRect(10, GAME_HEIGHT - 34, 200, 8)
   }
 
   private cleanupBullets() {
@@ -1120,82 +1181,94 @@ export class GameScene extends Phaser.Scene {
 
  private spawnDeathEffect(x: number, y: number, type?: string) {
     if (type === EnemyType.CHARGER) {
-      // Orange burst: 8 particles
+      // Orange burst: 8 particles with flash
+      const flash = this.add.circle(x, y, 10, 0xff8800, 0.6).setDepth(15)
+      this.tweens.add({ targets: flash, alpha: 0, scale: 0, duration: 200, onComplete: () => flash.destroy() })
       for (let i = 0; i < 8; i++) {
         const particle = this.add.circle(x, y, 4, 0xff8800, 1).setDepth(15)
         const a = (Math.PI * 2 / 8) * i
         this.tweens.add({
           targets: particle,
           x: x + Math.cos(a) * 40, y: y + Math.sin(a) * 40,
-          alpha: 0, scale: 0, duration: 350,
+          alpha: 0, scale: 0, duration: 350 + Math.random() * 100,
           onComplete: () => particle.destroy(),
         })
       }
     } else if (type === EnemyType.SHOOTER) {
-      // Purple spark: 6 particles
-      for (let i = 0; i < 6; i++) {
-        const particle = this.add.circle(x, y, 3, 0xaa44ff, 1).setDepth(15)
-        const a = (Math.PI * 2 / 6) * i + Math.random() * 0.3
+      // Purple spark: 8 particles with glow
+      const flash = this.add.circle(x, y, 8, 0xaa44ff, 0.5).setDepth(15)
+      this.tweens.add({ targets: flash, alpha: 0, scale: 0, duration: 250, onComplete: () => flash.destroy() })
+      for (let i = 0; i < 8; i++) {
+        const particle = this.add.circle(x, y, 3, Math.random() > 0.5 ? 0xaa44ff : 0xcc66ff, 1).setDepth(15)
+        const a = (Math.PI * 2 / 8) * i + Math.random() * 0.3
         this.tweens.add({
           targets: particle,
           x: x + Math.cos(a) * 35, y: y + Math.sin(a) * 35,
-          alpha: 0, scale: 0, duration: 250,
+          alpha: 0, scale: 0, duration: 250 + Math.random() * 80,
           onComplete: () => particle.destroy(),
         })
       }
     } else if (type === EnemyType.ELITE) {
-      // Red explosion ring + 12 particles
+      // Red explosion: bigger ring + more particles + flash
+      const flash = this.add.circle(x, y, 16, 0xff0044, 0.7).setDepth(15)
+      this.tweens.add({ targets: flash, alpha: 0, scale: 2, duration: 300, onComplete: () => flash.destroy() })
       const ring = this.add.graphics().setDepth(15)
       ring.lineStyle(3, 0xff0044, 1)
       ring.strokeCircle(x, y, 5)
       this.tweens.add({
         targets: ring,
-        scaleX: 4, scaleY: 4, alpha: 0, duration: 400,
+        scaleX: 5, scaleY: 5, alpha: 0, duration: 500,
         onComplete: () => ring.destroy(),
       })
-      for (let i = 0; i < 12; i++) {
-        const particle = this.add.circle(x, y, 5, 0xff0044, 1).setDepth(15)
-        const a = (Math.PI * 2 / 12) * i
+      for (let i = 0; i < 16; i++) {
+        const particle = this.add.circle(x, y, 4 + Math.random() * 3, i % 3 === 0 ? 0xff8844 : 0xff0044, 1).setDepth(15)
+        const a = (Math.PI * 2 / 16) * i + Math.random() * 0.2
         this.tweens.add({
             targets: particle,
-            x: x + Math.cos(a) * 50, y: y + Math.sin(a) * 50,
-            alpha: 0, scale: 0, duration: 400,
+            x: x + Math.cos(a) * (40 + Math.random() * 20), y: y + Math.sin(a) * (40 + Math.random() * 20),
+            alpha: 0, scale: 0, duration: 350 + Math.random() * 150,
             onComplete: () => particle.destroy(),
           })
       }
     } else if (type === "boss") {
-      // Massive explosion: 20 particles + multiple rings
+      // Massive explosion: flash + expanding rings + 30 particles
+      const flash = this.add.circle(x, y, 24, 0x8844cc, 0.8).setDepth(15)
+      this.tweens.add({ targets: flash, alpha: 0, scale: 2, duration: 400, onComplete: () => flash.destroy() })
       for (let ring = 0; ring < 3; ring++) {
         const r = this.add.graphics().setDepth(15)
         r.lineStyle(4 - ring, 0x8844cc, 1)
         r.strokeCircle(x, y, 5 + ring * 5)
         this.tweens.add({
           targets: r,
-          scaleX: 3 + ring, scaleY: 3 + ring, alpha: 0,
+          scaleX: 4 + ring * 2, scaleY: 4 + ring * 2, alpha: 0,
           duration: 500 + ring * 150, delay: ring * 100,
           onComplete: () => r.destroy(),
         })
       }
-      for (let i = 0; i < 20; i++) {
-        const particle = this.add.circle(x, y, 5 + Math.random() * 3, 0x8844cc, 1).setDepth(15)
-        const a = (Math.PI * 2 / 20) * i
-        const dist = 40 + Math.random() * 40
+      // Golden sparkles mixed in
+      for (let i = 0; i < 30; i++) {
+        const color = Math.random() > 0.3 ? 0x8844cc : 0xffd700
+        const particle = this.add.circle(x, y, 4 + Math.random() * 4, color, 1).setDepth(15)
+        const a = (Math.PI * 2 / 30) * i + Math.random() * 0.1
+        const dist = 30 + Math.random() * 60
         this.tweens.add({
           targets: particle,
           x: x + Math.cos(a) * dist, y: y + Math.sin(a) * dist,
-          alpha: 0, scale: 0, duration: 500 + Math.random() * 200,
+          alpha: 0, scale: 0, duration: 400 + Math.random() * 300,
           onComplete: () => particle.destroy(),
         })
       }
     } else {
-      // Default: generic burst
+      // Default: generic burst with flash
+      const flash = this.add.circle(x, y, 6, COLORS.ENEMY, 0.5).setDepth(15)
+      this.tweens.add({ targets: flash, alpha: 0, scale: 0, duration: 200, onComplete: () => flash.destroy() })
       for (let i = 0; i < 6; i++) {
-        const particle = this.add.circle(x, y, 4, COLORS.ENEMY, 1).setDepth(15)
-        const a = (Math.PI * 2 / 6) * i
+        const particle = this.add.circle(x, y, 3 + Math.random() * 2, COLORS.ENEMY, 1).setDepth(15)
+        const a = (Math.PI * 2 / 6) * i + Math.random() * 0.2
         this.tweens.add({
           targets: particle,
-          x: x + Math.cos(a) * 30, y: y + Math.sin(a) * 30,
-          alpha: 0, scale: 0, duration: 300,
+          x: x + Math.cos(a) * (25 + Math.random() * 15), y: y + Math.sin(a) * (25 + Math.random() * 15),
+          alpha: 0, scale: 0, duration: 200 + Math.random() * 100,
           onComplete: () => particle.destroy(),
         })
       }
@@ -1211,19 +1284,19 @@ export class GameScene extends Phaser.Scene {
 
     this.soundManager.fadeOutBGM(1000)
     this.physics.pause()
-    this.add.text(480, 260, "游戏结束", {
+    this.add.text(GAME_WIDTH / 2, GAME_HEIGHT / 2 - 100, "游戏结束", {
       fontSize: "36px", color: "#ff5252", fontFamily: "monospace", fontStyle: "bold",
     }).setOrigin(0.5).setDepth(300).setScrollFactor(0)
 
-    this.add.text(480, 310, `到达波次: ${this.waveNumber}`, {
+    this.add.text(GAME_WIDTH / 2, GAME_HEIGHT / 2 - 50, `到达波次: ${this.waveNumber}`, {
       fontSize: "18px", color: "#ffffff", fontFamily: "monospace",
     }).setOrigin(0.5).setDepth(300).setScrollFactor(0)
 
-    this.add.text(480, 340, `获得晶石: +${crystalsEarned}`, {
+    this.add.text(GAME_WIDTH / 2, GAME_HEIGHT / 2 - 20, `获得晶石: +${crystalsEarned}`, {
       fontSize: "18px", color: "#ffd700", fontFamily: "monospace",
     }).setOrigin(0.5).setDepth(300).setScrollFactor(0)
 
-    this.add.text(480, 390, "点击继续", {
+    this.add.text(GAME_WIDTH / 2, GAME_HEIGHT / 2 + 30, "点击继续", {
       fontSize: "16px", color: "#aaaacc", fontFamily: "monospace",
     }).setOrigin(0.5).setDepth(300).setScrollFactor(0)
 

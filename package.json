@@ -10,6 +10,7 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
+    "generate-audio": "node scripts/generate-audio.mjs",
     "electron:dev": "vite build && electron . --dev",
     "electron:build": "vite build && electron-builder --win portable",
     "pack": "vite build && electron-builder --win portable --x64"
