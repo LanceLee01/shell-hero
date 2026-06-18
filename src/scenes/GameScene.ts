@@ -1,4 +1,4 @@
-import Phaser from "phaser"
+﻿import Phaser from "phaser"
 import { TILE_SIZE, PLAYER, DODGE, COLORS } from "@/config"
 import { MAP_WIDTH, MAP_HEIGHT, TileType } from "@/map/types"
 import { EnemyType, ENEMY_LIST, ENEMY_DEFS, EnemyConfig } from "@/systems/EnemyDefs"
@@ -6,7 +6,7 @@ import { WeaponId, WEAPON_LIST } from "@/systems/WeaponDefs"
 import { ItemType, ITEM_DEFS, ItemDef } from "@/systems/ItemDefs"
 import { XP_BASE, XP_INCREMENT, getRandomUpgrades } from "@/systems/UpgradeDefs"
 import { MapTheme, THEMES } from "@/systems/MapThemes"
-import { loadSave, computeBonuses, saveSave } from "@/systems/TalentDefs"
+import { loadSave, computeBonuses, saveSave, getActiveSlot } from "@/systems/TalentDefs"
 import { BOSS_DEF } from "@/systems/BossDefs"
 import { SoundManager, SoundKey } from "@/systems/SoundManager"
 
@@ -117,7 +117,7 @@ export class GameScene extends Phaser.Scene {
     }
 
     const talSave = loadSave()
-    const talBonus = computeBonuses(talSave)
+    const talBonus = computeBonuses(getActiveSlot(talSave))
     this.maxHpBonus = talBonus.maxHp
     this.playerMaxHP = PLAYER.MAX_HP + this.maxHpBonus
     this.playerHP = this.playerMaxHP
@@ -1206,7 +1206,7 @@ export class GameScene extends Phaser.Scene {
     this.soundManager.playSFX(SoundKey.GAME_OVER)
     const crystalsEarned = Math.max(1, this.waveNumber * 3)
     const save = loadSave()
-    save.crystals += crystalsEarned
+    getActiveSlot(save).crystals += crystalsEarned
     saveSave(save)
 
     this.soundManager.fadeOutBGM(1000)
