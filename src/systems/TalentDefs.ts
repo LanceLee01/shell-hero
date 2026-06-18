@@ -16,18 +16,52 @@ export const TALENTS: TalentDef[] = [
 ]
 
 const STORAGE_KEY = "roguelike_save"
+const MAX_SLOTS = 3
 
-export interface SaveData {
+export interface SaveSlot {
+  id: number
+  name: string
   crystals: number
   talents: Record<string, number>
+  lastSave: string
+}
+
+export interface SaveData {
+  activeSlot: number
+  slots: SaveSlot[]
 }
 
 export function loadSave(): SaveData {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
-    if (raw) return JSON.parse(raw)
+    if (raw) {
+      const data = JSON.parse(raw)
+      // 兼容旧格式
+      if (data.slots) return data
+      if (data.crystals !== undefined) {
+        return {
+          activeSlot: 0,
+          slots: [{
+            id: 0,
+            name: "存档 1",
+            crystals: data.crystals,
+            talents: data.talents || {},
+            lastSave: new Date().toISOString()
+          }]
+        }
+      }
+    }
   } catch { /* ignore */ }
-  return { crystals: 0, talents: {} }
+  return {
+    activeSlot: 0,
+    slots: [{
+      id: 0,
+      name: "存档 1",
+      crystals: 0,
+      talents: {},
+      lastSave: ""
+    }]
+  }
 }
 
 export function saveSave(data: SaveData): void {
@@ -36,8 +70,40 @@ export function saveSave(data: SaveData): void {
   } catch { /* ignore */ }
 }
 
-export function getTalentLevel(data: SaveData, id: string): number {
-  return data.talents[id] || 0
+export function getActiveSlot(data: SaveData): SaveSlot {
+  return data.slots[data.activeSlot] || data.slots[0]
+}
+
+export function switchSlot(data: SaveData, slotId: number): void {
+  if (slotId >= 0 && slotId < data.slots.length) {
+    data.activeSlot = slotId
+  }
+}
+
+export function createSlot(data: SaveData, name: string): void {
+  if (data.slots.length < MAX_SLOTS) {
+    data.slots.push({
+      id: data.slots.length,
+      name,
+      crystals: 0,
+      talents: {},
+      lastSave: ""
+    })
+  }
+}
+
+export function deleteSlot(data: SaveData, slotId: number): void {
+  if (data.slots.length > 1 && slotId < data.slots.length) {
+    data.slots.splice(slotId, 1)
+    data.slots.forEach((s, i) => s.id = i)
+    if (data.activeSlot >= data.slots.length) {
+      data.activeSlot = data.slots.length - 1
+    }
+  }
+}
+
+export function getTalentLevel(slot: SaveSlot, id: string): number {
+  return slot.talents[id] || 0
 }
 
 export interface TalentBonuses {
@@ -49,13 +115,13 @@ export interface TalentBonuses {
   xpPercent: number
 }
 
-export function computeBonuses(data: SaveData): TalentBonuses {
+export function computeBonuses(slot: SaveSlot): TalentBonuses {
   return {
-    maxHp: getTalentLevel(data, "hp") * 10,
-    damagePercent: getTalentLevel(data, "damage") * 5,
-    speedPercent: getTalentLevel(data, "speed") * 5,
-    startGold: getTalentLevel(data, "gold") * 30,
-    dodgeCdReduction: getTalentLevel(data, "dodge_cd") * 100,
-    xpPercent: getTalentLevel(data, "xp_boost") * 10,
+    maxHp: getTalentLevel(slot, "hp") * 10,
+    damagePercent: getTalentLevel(slot, "damage") * 5,
+    speedPercent: getTalentLevel(slot, "speed") * 5,
+    startGold: getTalentLevel(slot, "gold") * 30,
+    dodgeCdReduction: getTalentLevel(slot, "dodge_cd") * 100,
+    xpPercent: getTalentLevel(slot, "xp_boost") * 10,
   }
 }
