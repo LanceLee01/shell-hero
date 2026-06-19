@@ -1,6 +1,6 @@
 import Phaser from "phaser"
 import { GAME_WIDTH, GAME_HEIGHT } from "@/config"
-import { WEAPON_LIST, WeaponDef, WeaponId } from "@/systems/WeaponDefs"
+import { BASE_WEAPON_LIST, WeaponDef, WeaponId } from "@/systems/WeaponDefs"
 import { MapTheme } from "@/systems/MapThemes"
 
 export class WeaponSelectScene extends Phaser.Scene {
@@ -22,7 +22,7 @@ export class WeaponSelectScene extends Phaser.Scene {
       fontSize: "28px", color: "#ffffff", fontFamily: "monospace", fontStyle: "bold",
     }).setOrigin(0.5)
 
-    WEAPON_LIST.forEach((w, i) => {
+    BASE_WEAPON_LIST.forEach((w, i) => {
       const cx = GAME_WIDTH / 4 + i * GAME_WIDTH / 3.2; const cy = 340
       this.createWeaponCard(cx, cy, w)
     })
