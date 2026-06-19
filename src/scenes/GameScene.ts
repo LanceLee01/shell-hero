@@ -548,7 +548,17 @@ export class GameScene extends Phaser.Scene {
     this.weaponTimer = weapon.fireRate * this.fireRateMult
   }
 
-  private fireProjectile(angle: number, weapon: typeof WEAPON_LIST[0]) {
+  private fireProjectile(angle: number, weapon: WeaponDef) {
+    // Dispatch special weapons
+    if (weapon.special === "laser") { this.fireLaser(angle, weapon); return }
+    if (weapon.special === "grenade") { this.fireGrenade(angle, weapon); return }
+    if (weapon.special === "freeze") { this.fireFreeze(angle, weapon); return }
+    if (weapon.special === "cannon") { this.fireCannon(angle, weapon); return }
+    // Standard weapon logic (pistol, shotgun, smg, minigun)
+    this.fireStandardBullet(angle, weapon)
+  }
+
+  private fireStandardBullet(angle: number, weapon: WeaponDef) {
     const dmg = Math.round(weapon.damage * this.damageMult)
     const speed = (weapon.projSpeed || 500) * this.projSpeedMult
     const pellets = (weapon.pellets || 1) + this.extraPellets
@@ -561,11 +571,7 @@ export class GameScene extends Phaser.Scene {
 
       const bulletKey = weapon.id === WeaponId.SHOTGUN ? "bullet" :
         weapon.id === WeaponId.SMG ? "bullet_smg" :
-        weapon.id === WeaponId.LASER ? "bullet_laser" :
-        weapon.id === WeaponId.GRENADE ? "bullet_grenade" :
-        weapon.id === WeaponId.FREEZE ? "bullet_freeze" :
         weapon.id === WeaponId.MINIGUN ? "bullet_minigun" :
-        weapon.id === WeaponId.CANNON ? "bullet_cannon" :
         "bullet_pistol"
 
       const bullet = this.bullets.get(this.player.x, this.player.y, bulletKey) as Phaser.Physics.Arcade.Sprite | null
@@ -581,6 +587,65 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
+  private fireLaser(angle: number, weapon: WeaponDef) {
+    const dmg = Math.round(weapon.damage * this.damageMult)
+    const speed = (weapon.projSpeed || 800) * this.projSpeedMult
+    const bullet = this.bullets.get(this.player.x, this.player.y, "bullet_laser") as Phaser.Physics.Arcade.Sprite | null
+    if (!bullet) return
+    bullet.setActive(true).setVisible(true).setDepth(8)
+    bullet.setData("damage", dmg)
+    bullet.setData("isLaser", true)
+    const body = bullet.body as Phaser.Physics.Arcade.Body
+    body.setCircle(3, 0, 0)
+    body.enable = true
+    const pointer = this.input.activePointer
+    const worldPoint = this.cameras.main.getWorldPoint(pointer.x, pointer.y)
+    const aimAngle = Phaser.Math.Angle.Between(this.player.x, this.player.y, worldPoint.x, worldPoint.y)
+    bullet.setVelocity(Math.cos(aimAngle) * speed, Math.sin(aimAngle) * speed)
+  }
+
+  private fireGrenade(angle: number, weapon: WeaponDef) {
+    const dmg = Math.round(weapon.damage * this.damageMult)
+    const speed = (weapon.projSpeed || 400) * this.projSpeedMult
+    const bullet = this.bullets.get(this.player.x, this.player.y, "bullet_grenade") as Phaser.Physics.Arcade.Sprite | null
+    if (!bullet) return
+    bullet.setActive(true).setVisible(true).setDepth(8)
+    bullet.setData("damage", dmg)
+    bullet.setData("isGrenade", true)
+    const body = bullet.body as Phaser.Physics.Arcade.Body
+    body.setCircle(4, 0, 0)
+    body.enable = true
+    bullet.setVelocity(Math.cos(angle) * speed, Math.sin(angle) * speed)
+  }
+
+  private fireFreeze(angle: number, weapon: WeaponDef) {
+    const dmg = Math.round(weapon.damage * this.damageMult)
+    const speed = (weapon.projSpeed || 500) * this.projSpeedMult
+    const bullet = this.bullets.get(this.player.x, this.player.y, "bullet_freeze") as Phaser.Physics.Arcade.Sprite | null
+    if (!bullet) return
+    bullet.setActive(true).setVisible(true).setDepth(8)
+    bullet.setData("damage", dmg)
+    bullet.setData("isFreeze", true)
+    const body = bullet.body as Phaser.Physics.Arcade.Body
+    body.setCircle(3, 0, 0)
+    body.enable = true
+    bullet.setVelocity(Math.cos(angle) * speed, Math.sin(angle) * speed)
+  }
+
+  private fireCannon(angle: number, weapon: WeaponDef) {
+    const dmg = Math.round(weapon.damage * this.damageMult)
+    const speed = (weapon.projSpeed || 700) * this.projSpeedMult
+    const bullet = this.bullets.get(this.player.x, this.player.y, "bullet_cannon") as Phaser.Physics.Arcade.Sprite | null
+    if (!bullet) return
+    bullet.setActive(true).setVisible(true).setDepth(8)
+    bullet.setData("damage", dmg)
+    bullet.setData("isCannon", true)
+    const body = bullet.body as Phaser.Physics.Arcade.Body
+    body.setCircle(5, 0, 0)
+    body.enable = true
+    bullet.setVelocity(Math.cos(angle) * speed, Math.sin(angle) * speed)
+  }
+
   private updateEnemyAI() {
     this.enemies.getChildren().forEach((e) => {
       const enemy = e as Phaser.Physics.Arcade.Sprite
@@ -590,6 +655,12 @@ export class GameScene extends Phaser.Scene {
       const dist = Phaser.Math.Distance.Between(enemy.x, enemy.y, this.player.x, this.player.y)
       const body = enemy.body as Phaser.Physics.Arcade.Body
       enemy.setRotation(angle - Math.PI / 2)
+
+      // 冰冻减速处理
+      const slowTimer = enemy.getData("slowTimer") as number | undefined
+      if (slowTimer && slowTimer > 0) {
+        enemy.setData("slowTimer", slowTimer - 16.67)
+      }
 
       const type = enemy.getData("type") as string | undefined
       if (type === EnemyType.SHOOTER) {
@@ -653,6 +724,14 @@ export class GameScene extends Phaser.Scene {
           ? 160 + this.waveNumber * 4
           : 65 + this.waveNumber * 3
         body.setVelocity(Math.cos(angle) * eSpeed, Math.sin(angle) * eSpeed)
+      }
+
+      // 减速效果
+      if (enemy.getData("slowTimer") as number > 0) {
+        body.setVelocity(body.velocity.x * 0.5, body.velocity.y * 0.5)
+        enemy.setTint(0x88ccff)
+      } else {
+        enemy.clearTint()
       }
     })
   }
@@ -838,6 +917,68 @@ export class GameScene extends Phaser.Scene {
   ) {
     const bullet = bulletObj as Phaser.Physics.Arcade.Sprite
     const enemy = enemyObj as Phaser.Physics.Arcade.Sprite
+
+    // 能量炮穿透 — 不销毁子弹
+    if (bullet.getData("isCannon")) {
+      const dmg = bullet.getData("damage") as number
+      if (enemy.getData("isBoss")) {
+        this.bossHP -= dmg
+        this.flashSprite(enemy)
+        if (this.bossHP <= 0) this.bossDeath()
+      } else {
+        const hp = enemy.getData("hp") as number
+        enemy.setData("hp", hp - dmg)
+        if (hp - dmg <= 0) {
+          this.spawnDeathEffect(enemy.x, enemy.y, enemy.getData("type"))
+          this.onEnemyKilled(enemy.x, enemy.y)
+          enemy.destroy()
+        } else {
+          this.flashSprite(enemy)
+        }
+      }
+      // 不销毁子弹，继续飞行
+      return
+    }
+
+    // 冰冻弹 — 施加减速
+    if (bullet.getData("isFreeze")) {
+      enemy.setData("slowTimer", 2000)
+      enemy.setTint(0x88ccff)
+    }
+
+    // 榴弹 — 爆炸范围伤害
+    if (bullet.getData("isGrenade")) {
+      const dmg = bullet.getData("damage") as number
+      const explosion = this.add.circle(bullet.x, bullet.y, 40, 0xff8800, 0.3).setDepth(15)
+      this.tweens.add({
+        targets: explosion, alpha: 0, scale: 1.5, duration: 300,
+        onComplete: () => explosion.destroy(),
+      })
+      this.enemies.getChildren().forEach((e) => {
+        const aoeEnemy = e as Phaser.Physics.Arcade.Sprite
+        if (!aoeEnemy.active) return
+        const dist = Phaser.Math.Distance.Between(bullet.x, bullet.y, aoeEnemy.x, aoeEnemy.y)
+        if (dist < 40) {
+          if (aoeEnemy.getData("isBoss")) {
+            this.bossHP -= dmg
+            this.flashSprite(aoeEnemy)
+            if (this.bossHP <= 0) this.bossDeath()
+          } else {
+            const hp = aoeEnemy.getData("hp") as number
+            aoeEnemy.setData("hp", hp - dmg)
+            if (hp - dmg <= 0) {
+              this.spawnDeathEffect(aoeEnemy.x, aoeEnemy.y, aoeEnemy.getData("type"))
+              this.onEnemyKilled(aoeEnemy.x, aoeEnemy.y)
+              aoeEnemy.destroy()
+            } else {
+              this.flashSprite(aoeEnemy)
+            }
+          }
+        }
+      })
+    }
+
+    // Normal bullet deactivation
     bullet.setActive(false).setVisible(false)
     const bulletBody = bullet.body as Phaser.Physics.Arcade.Body
     bulletBody.enable = false
@@ -1224,6 +1365,15 @@ export class GameScene extends Phaser.Scene {
     this.bullets.getChildren().forEach((b) => {
       const bullet = b as Phaser.Physics.Arcade.Sprite
       if (!bullet.active) return
+      // Cannon 穿透弹 — 更大的边界
+      if (bullet.getData("isCannon")) {
+        if (bullet.x < -50 || bullet.x > maxX + 50 || bullet.y < -50 || bullet.y > maxY + 50) {
+          bullet.setActive(false).setVisible(false)
+          const body = bullet.body as Phaser.Physics.Arcade.Body
+          body.enable = false
+        }
+        return
+      }
       if (bullet.x < -16 || bullet.x > maxX || bullet.y < -16 || bullet.y > maxY) {
         bullet.setActive(false).setVisible(false)
         const body = bullet.body as Phaser.Physics.Arcade.Body
