@@ -25,6 +25,7 @@ export class BootScene extends Phaser.Scene {
     this.generateUI()
     this.generateShotgunTexture()
     this.generateEnemyBulletTextures()
+    this.generateBossWeaponTextures()
 
     // Audio: SFX (via SoundManager) + BGM
     SoundManager.preload(this)
@@ -239,6 +240,73 @@ export class BootScene extends Phaser.Scene {
     g.fillStyle(0xff8888, 0.7)
     g.fillCircle(3, 3, 1)
     g.generateTexture("bullet_enemy", 6, 6)
+
+    g.destroy()
+  }
+
+  private generateBossWeaponTextures() {
+    const g = this.add.graphics()
+
+    // bullet_laser — 红色光束 (8x5)
+    g.fillStyle(0xff2222, 1)
+    g.fillRect(0, 1, 8, 3)
+    g.fillStyle(0xff8888, 0.8)
+    g.fillRect(1, 2, 6, 1)
+    g.generateTexture("bullet_laser", 8, 5)
+
+    // bullet_grenade — 橙色大弹丸 (8x8)
+    g.clear()
+    g.fillStyle(0xcc4400, 1)
+    g.fillCircle(4, 4, 4)
+    g.fillStyle(0xff8800, 0.8)
+    g.fillCircle(4, 4, 2.5)
+    g.generateTexture("bullet_grenade", 8, 8)
+
+    // bullet_freeze — 蓝色菱形 (6x6)
+    g.clear()
+    g.fillStyle(0x44aaff, 1)
+    g.beginPath()
+    g.moveTo(3, 0); g.lineTo(6, 3); g.lineTo(3, 6); g.lineTo(0, 3)
+    g.closePath(); g.fillPath()
+    g.fillStyle(0x88ccff, 0.6)
+    g.fillCircle(3, 3, 1.5)
+    g.generateTexture("bullet_freeze", 6, 6)
+
+    // bullet_minigun — 亮黄色小点 (4x4)
+    g.clear()
+    g.fillStyle(0xffdd00, 1)
+    g.fillCircle(2, 2, 2)
+    g.fillStyle(0xffffff, 0.8)
+    g.fillCircle(2, 2, 1)
+    g.generateTexture("bullet_minigun", 4, 4)
+
+    // bullet_cannon — 白色大光球 (10x10)
+    g.clear()
+    g.fillStyle(0xccccff, 1)
+    g.fillCircle(5, 5, 5)
+    g.fillStyle(0xffffff, 1)
+    g.fillCircle(5, 5, 3)
+    g.fillStyle(0xffffff, 0.9)
+    g.fillCircle(5, 5, 1.5)
+    g.generateTexture("bullet_cannon", 10, 10)
+
+    // weapon_pickup — 发光星形拾取物 (16x16)
+    g.clear()
+    g.fillStyle(0x4fc3f7, 1)
+    g.beginPath()
+    for (let i = 0; i < 4; i++) {
+      const a = (Math.PI / 2) * i - Math.PI / 4
+      const x = 8 + 7 * Math.cos(a)
+      const y = 8 + 7 * Math.sin(a)
+      if (i === 0) g.moveTo(x, y)
+      else g.lineTo(x, y)
+    }
+    g.closePath(); g.fillPath()
+    g.fillStyle(0xffffff, 0.5)
+    g.fillCircle(8, 8, 3)
+    g.lineStyle(1, 0xffffff, 0.4)
+    g.strokeCircle(8, 8, 7)
+    g.generateTexture("weapon_pickup", 16, 16)
 
     g.destroy()
   }
