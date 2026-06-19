@@ -23,6 +23,8 @@ npm-debug.log*
 .env
 .env.local
 
+.claude/
+
 # Other projects
 CSGO_Game/
 vampire-mvp/
