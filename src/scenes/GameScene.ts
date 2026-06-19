@@ -2,7 +2,7 @@
 import { TILE_SIZE, PLAYER, DODGE, COLORS, GAME_WIDTH, GAME_HEIGHT } from "@/config"
 import { MAP_WIDTH, MAP_HEIGHT, TileType } from "@/map/types"
 import { EnemyType, ENEMY_LIST, ENEMY_DEFS, EnemyConfig } from "@/systems/EnemyDefs"
-import { WeaponId, WEAPON_LIST } from "@/systems/WeaponDefs"
+import { WeaponId, WEAPON_LIST, WeaponDef } from "@/systems/WeaponDefs"
 import { ItemType, ITEM_DEFS, ItemDef } from "@/systems/ItemDefs"
 import { XP_BASE, XP_INCREMENT, getRandomUpgrades } from "@/systems/UpgradeDefs"
 import { MapTheme, THEMES } from "@/systems/MapThemes"
@@ -26,6 +26,10 @@ export class GameScene extends Phaser.Scene {
   private weaponIdx: number = 0
   private weaponTimer: number = 0
   private initWeaponId?: WeaponId
+  private weaponSlots: (WeaponDef | null)[] = [null, null, null]
+  private key1!: Phaser.Input.Keyboard.Key
+  private key2!: Phaser.Input.Keyboard.Key
+  private key3!: Phaser.Input.Keyboard.Key
   private dodgeCooldownMs: number = DODGE.COOLDOWN
 
   private isDodging: boolean = false
@@ -117,6 +121,10 @@ export class GameScene extends Phaser.Scene {
       if (idx >= 0) this.weaponIdx = idx
     }
 
+    // 初始化武器槽位：slot 0 = 初始武器
+    const initWeapon = WEAPON_LIST.find(w => w.id === this.initWeaponId)
+    this.weaponSlots[0] = initWeapon || WEAPON_LIST[0]
+
     const talSave = loadSave()
     const talBonus = computeBonuses(getActiveSlot(talSave))
     this.maxHpBonus = talBonus.maxHp
@@ -189,6 +197,9 @@ export class GameScene extends Phaser.Scene {
     this.keyboard = {
       SPACE: this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE),
     }
+    this.key1 = this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.ONE)
+    this.key2 = this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.TWO)
+    this.key3 = this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.THREE)
   }
 
   private createBullets() {
@@ -383,11 +394,12 @@ export class GameScene extends Phaser.Scene {
 
   private createHUD() {
     this.uiWeaponBg = this.add.image(130, GAME_HEIGHT - 20, "ui_weapon_bar").setDepth(100).setScrollFactor(0)
-    for (let i = 0; i < WEAPON_LIST.length; i++) {
-      const w = WEAPON_LIST[i]
+    for (let i = 0; i < 3; i++) {
+      const w = this.weaponSlots[i]
+      const label = w ? `${i + 1} ${w.name}` : `${i + 1} 空`
       this.uiWeaponLabels.push(
-        this.add.text(26 + i * 73, GAME_HEIGHT - 27, `${i + 1} ${w.name}`, {
-          fontSize: "13px", color: "#ffffff", fontFamily: "monospace",
+        this.add.text(26 + i * 73, GAME_HEIGHT - 27, label, {
+          fontSize: "13px", color: "#888888", fontFamily: "monospace",
         }).setDepth(101).setScrollFactor(0),
       )
     }
@@ -466,6 +478,17 @@ export class GameScene extends Phaser.Scene {
   }
 
   private handleWeaponSwitch() {
+    if (this.upgradeActive) return
+    const keys = [this.key1, this.key2, this.key3]
+    for (let i = 0; i < 3; i++) {
+      if (Phaser.Input.Keyboard.JustDown(keys[i]) && this.weaponSlots[i]) {
+        if (this.weaponIdx !== i) {
+          this.weaponIdx = i
+          this.weaponTimer = 0
+          this.updateHUD()
+        }
+      }
+    }
   }
 
   private handleDodge(delta: number) {
@@ -518,7 +541,8 @@ export class GameScene extends Phaser.Scene {
     if (this.weaponTimer > 0) { this.weaponTimer -= delta; return }
     if (!pointer.isDown) return
 
-    const weapon = WEAPON_LIST[this.weaponIdx]
+    const weapon = this.weaponSlots[this.weaponIdx]
+    if (!weapon) return
     this.soundManager.playSFX(SoundKey.SHOOT)
     this.fireProjectile(angle, weapon)
     this.weaponTimer = weapon.fireRate * this.fireRateMult
@@ -536,7 +560,13 @@ export class GameScene extends Phaser.Scene {
       const a = angle + offset
 
       const bulletKey = weapon.id === WeaponId.SHOTGUN ? "bullet" :
-        weapon.id === WeaponId.SMG ? "bullet_smg" : "bullet_pistol"
+        weapon.id === WeaponId.SMG ? "bullet_smg" :
+        weapon.id === WeaponId.LASER ? "bullet_laser" :
+        weapon.id === WeaponId.GRENADE ? "bullet_grenade" :
+        weapon.id === WeaponId.FREEZE ? "bullet_freeze" :
+        weapon.id === WeaponId.MINIGUN ? "bullet_minigun" :
+        weapon.id === WeaponId.CANNON ? "bullet_cannon" :
+        "bullet_pistol"
 
       const bullet = this.bullets.get(this.player.x, this.player.y, bulletKey) as Phaser.Physics.Arcade.Sprite | null
       if (!bullet) break
@@ -1152,7 +1182,14 @@ export class GameScene extends Phaser.Scene {
 
   private updateHUD() {
     for (let i = 0; i < this.uiWeaponLabels.length; i++) {
-      this.uiWeaponLabels[i].setColor(i === this.weaponIdx ? "#4fc3f7" : "#888888")
+      const hasWeapon = !!this.weaponSlots[i]
+      if (i === this.weaponIdx) {
+        this.uiWeaponLabels[i].setColor("#4fc3f7")
+      } else if (hasWeapon) {
+        this.uiWeaponLabels[i].setColor("#888888")
+      } else {
+        this.uiWeaponLabels[i].setColor("#444444")
+      }
     }
     this.uiResources.setText(`Lv${this.level} HP:${this.playerHP} G:${this.gold}`)
     this.uiXpBar.clear()
