@@ -242,7 +242,7 @@ export class GameScene extends Phaser.Scene {
     this.boss.setDepth(8)
     this.boss.setData("isBoss", true)
 
-    this.bossMaxHP = 200 + this.waveNumber * 50
+    this.bossMaxHP = BOSS_DEF.baseHp + this.waveNumber * BOSS_DEF.hpScalePerWave
     this.bossHP = this.bossMaxHP
     this.bossPhase = 0
     this.bossAttackTimer = 0
@@ -457,6 +457,7 @@ export class GameScene extends Phaser.Scene {
     this.updateEnemyAI()
     this.updateBossAI(_time, delta)
     if (this.boss && this.boss.active) this.updateBossHPBar()
+    this.updateHomingBullets()
     this.updateHPBar()
     this.cleanupBullets()
     this.updateHUD()
@@ -686,10 +687,10 @@ export class GameScene extends Phaser.Scene {
 
   private getAttackInterval(phase: number): number {
     switch (phase) {
-      case 0: return 2000   // fan every 2s
-      case 1: return 1500   // scatter every 1.5s
-      case 2: return 300    // bullet-hell every 0.3s
-      default: return 2000
+      case 0: return 1800
+      case 1: return 1200
+      case 2: return 250
+      default: return 1800
     }
   }
 
@@ -731,6 +732,60 @@ export class GameScene extends Phaser.Scene {
               Math.sin(pAngle) * BOSS_DEF.phases[this.bossPhase].speed)
           }
         })
+        break
+      }
+      case "homing": {
+        for (let i = 0; i < count; i++) {
+          const bullet = this.enemyBullets.get(boss.x, boss.y, "bullet_enemy") as Phaser.Physics.Arcade.Sprite | null
+          if (!bullet) break
+          bullet.setActive(true).setVisible(true).setDepth(8)
+          const bBody = bullet.body as Phaser.Physics.Arcade.Body
+          bBody.setCircle(4, 0, 0)
+          bBody.enable = true
+          const a = Phaser.Math.Angle.Between(boss.x, boss.y, this.player.x, this.player.y)
+          const homingSpeed = 180
+          bullet.setVelocity(Math.cos(a) * homingSpeed, Math.sin(a) * homingSpeed)
+          bullet.setData("homing", true)
+        }
+        break
+      }
+      case "ring-burst": {
+        const rings = count || 2
+        for (let r = 0; r < rings; r++) {
+          const bulletCount = 8 + r * 4
+          const startAngle = (Math.PI * 2 / bulletCount) * r * 0.5
+          for (let i = 0; i < bulletCount; i++) {
+            const a = startAngle + (Math.PI * 2 / bulletCount) * i
+            this.fireBossBullet(boss.x, boss.y, a)
+          }
+        }
+        break
+      }
+      case "laser-sweep": {
+        const laserCount = count || 3
+        for (let i = 0; i < laserCount; i++) {
+          const targetX = this.player.x + Phaser.Math.Between(-100, 100)
+          const targetY = this.player.y + Phaser.Math.Between(-100, 100)
+          const warning = this.add.rectangle(targetX, targetY, 80, 12, 0xff0000, 0.3).setDepth(15)
+          this.tweens.add({
+            targets: warning,
+            alpha: { from: 0.3, to: 0.6 },
+            duration: 800,
+            yoyo: true,
+            onComplete: () => {
+              warning.destroy()
+              const laser = this.add.rectangle(targetX, targetY, 80, 12, 0xff0000, 0.6).setDepth(15)
+              this.tweens.add({ targets: laser, alpha: 0, duration: 500, onComplete: () => laser.destroy() })
+              const dist = Phaser.Math.Distance.Between(this.player.x, this.player.y, targetX, targetY)
+              if (dist < 50) {
+                this.playerHP -= 15
+                this.flashDamageOverlay()
+                this.flashSprite(this.player)
+                if (this.playerHP <= 0) { this.playerHP = 0; this.gameOver() }
+              }
+            },
+          })
+        }
         break
       }
     }
@@ -1130,6 +1185,21 @@ export class GameScene extends Phaser.Scene {
         body.enable = false
         bullet.setData("sourceEnemy", undefined)
       }
+    })
+  }
+
+  private updateHomingBullets() {
+    this.enemyBullets.getChildren().forEach((b) => {
+      const bullet = b as Phaser.Physics.Arcade.Sprite
+      if (!bullet.active || !bullet.getData("homing")) return
+      const a = Phaser.Math.Angle.Between(bullet.x, bullet.y, this.player.x, this.player.y)
+      const body = bullet.body as Phaser.Physics.Arcade.Body
+      const vx = body.velocity.x
+      const vy = body.velocity.y
+      const currentAngle = Math.atan2(vy, vx)
+      const newAngle = Phaser.Math.Angle.RotateTo(currentAngle, a, 0.05)
+      const speed = Math.sqrt(vx * vx + vy * vy)
+      body.setVelocity(Math.cos(newAngle) * speed, Math.sin(newAngle) * speed)
     })
   }
 
