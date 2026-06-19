@@ -753,9 +753,10 @@ export class GameScene extends Phaser.Scene {
         const rings = count || 2
         for (let r = 0; r < rings; r++) {
           const bulletCount = 8 + r * 4
-          const startAngle = (Math.PI * 2 / bulletCount) * r * 0.5
+          const direction = r % 2 === 0 ? 1 : -1  // 反向旋转
+          const startAngle = spread * r * 0.5
           for (let i = 0; i < bulletCount; i++) {
-            const a = startAngle + (Math.PI * 2 / bulletCount) * i
+            const a = startAngle + (Math.PI * 2 / bulletCount) * i * direction
             this.fireBossBullet(boss.x, boss.y, a)
           }
         }
