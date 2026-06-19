@@ -2,6 +2,7 @@ export enum ItemType {
   HEAL = "heal",
   GOLD = "gold",
   XP = "xp",
+  WEAPON = "weapon",
 }
 
 export interface ItemDef {

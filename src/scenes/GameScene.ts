@@ -948,6 +948,22 @@ export class GameScene extends Phaser.Scene {
         case ItemType.XP: this.addXP(item.value || 10); break
       }
     }
+
+    // Boss weapon pickup — checked via data directly, not through ITEM_DEFS
+    if (itemId === "boss_weapon") {
+      const weaponId = pickup.getData("weaponDrop") as WeaponId
+      const weapon = WEAPON_LIST.find(w => w.id === weaponId)
+      if (weapon) {
+        let slot = -1
+        for (let i = 1; i < 3; i++) {
+          if (!this.weaponSlots[i]) { slot = i; break }
+        }
+        if (slot === -1) slot = this.weaponIdx
+        this.weaponSlots[slot] = weapon
+        this.updateHUD()
+      }
+    }
+
     this.showFloatingText(pickup.x, pickup.y, pickup.getData("pickupText") || "")
     pickup.destroy()
   }
@@ -1270,6 +1286,8 @@ export class GameScene extends Phaser.Scene {
     const crystalsReward = this.waveNumber * 10
     const goldReward = this.waveNumber * 5
     this.gold += goldReward
+    // Boss 武器掉落
+    this.spawnBossWeaponDrop(centerX, centerY + 40)
 
     this.showWaveText("BOSS DEFEATED!")
     this.cameras.main.shake(800, 0.03)
@@ -1281,6 +1299,39 @@ export class GameScene extends Phaser.Scene {
     this.tweens.add({ targets: rewardText, alpha: 0, duration: 1000, delay: 1500, onComplete: () => rewardText.destroy() })
 
     this.time.delayedCall(2500, () => this.startNextWave())
+  }
+
+  private spawnBossWeaponDrop(x: number, y: number) {
+    const bossWeapons = WEAPON_LIST.filter(w => w.isBossWeapon)
+    let dropWeapon: WeaponDef
+    const existingBossWeapons = this.weaponSlots.filter(s => s && s.isBossWeapon).map(s => s!.id)
+
+    if (existingBossWeapons.length === 0) {
+      dropWeapon = bossWeapons.find(w => w.id === WeaponId.LASER) || bossWeapons[0]
+    } else {
+      dropWeapon = bossWeapons[Phaser.Math.Between(0, bossWeapons.length - 1)]
+    }
+
+    const pickup = this.physics.add.sprite(x, y, "weapon_pickup") as Phaser.Physics.Arcade.Sprite
+    pickup.setDepth(15)
+    pickup.setData("itemId", "boss_weapon")
+    pickup.setData("weaponDrop", dropWeapon.id)
+    pickup.setData("pickupText", dropWeapon.name)
+    const body = pickup.body as Phaser.Physics.Arcade.Body
+    body.setImmovable(true)
+    body.setAllowGravity(false)
+
+    this.tweens.add({
+      targets: pickup,
+      scaleX: 1.3, scaleY: 1.3,
+      duration: 600, yoyo: true, repeat: -1, ease: "Sine.easeInOut",
+    })
+    this.tweens.add({
+      targets: pickup,
+      angle: 360, duration: 2000, repeat: -1,
+    })
+
+    this.pickups.add(pickup)
   }
 
   private flashSprite(sprite: Phaser.Physics.Arcade.Sprite) {
