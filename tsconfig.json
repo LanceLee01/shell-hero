@@ -16,6 +16,6 @@
       "@/*": ["./src/*"]
     }
   },
-  "exclude": ["src/map/BSPGenerator.ts"],
+  "exclude": [],
   "include": ["src"]
 }

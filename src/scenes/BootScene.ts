@@ -177,6 +177,19 @@ export class BootScene extends Phaser.Scene {
     g.fillCircle(6, 6, 2.5)
     g.generateTexture("item_xp", 12, 12)
 
+    g.clear()
+    // Magnet item - red horseshoe shape with glow
+    g.fillStyle(0xcc4444, 1)
+    g.fillRect(2, 1, 8, 3)
+    g.fillRect(5, 1, 2, 8)
+    g.fillRect(1, 5, 3, 4)
+    g.fillRect(8, 5, 3, 4)
+    g.fillStyle(0xff6666, 0.7)
+    g.fillRect(3, 2, 6, 2)
+    g.fillStyle(0xffffff, 0.5)
+    g.fillRect(6, 2, 1, 5)
+    g.generateTexture("item_magnet", 12, 12)
+
     g.destroy()
   }
 

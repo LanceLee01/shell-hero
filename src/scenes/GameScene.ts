@@ -1,5 +1,5 @@
 ﻿import Phaser from "phaser"
-import { TILE_SIZE, PLAYER, DODGE, COLORS, GAME_WIDTH, GAME_HEIGHT } from "@/config"
+import { TILE_SIZE, PLAYER, DODGE, COLORS, GAME_WIDTH, GAME_HEIGHT, GAMEPLAY } from "@/config"
 import { MAP_WIDTH, MAP_HEIGHT, TileType } from "@/map/types"
 import { EnemyType, ENEMY_LIST, ENEMY_DEFS, EnemyConfig } from "@/systems/EnemyDefs"
 import { WeaponId, WEAPON_LIST, WeaponDef } from "@/systems/WeaponDefs"
@@ -9,6 +9,7 @@ import { MapTheme, THEMES } from "@/systems/MapThemes"
 import { loadSave, computeBonuses, saveSave, getActiveSlot } from "@/systems/TalentDefs"
 import { BOSS_DEF } from "@/systems/BossDefs"
 import { SoundManager, SoundKey } from "@/systems/SoundManager"
+import { Logger } from "@/systems/Debug"
 
 export class GameScene extends Phaser.Scene {
   private player!: Phaser.Physics.Arcade.Sprite
@@ -61,9 +62,18 @@ export class GameScene extends Phaser.Scene {
   private playerMaxHP: number = PLAYER.MAX_HP
 
   private upgradeActive: boolean = false
+  private upgradeKeyA!: Phaser.Input.Keyboard.Key
+  private upgradeKeyS!: Phaser.Input.Keyboard.Key
+  private upgradeKeyD!: Phaser.Input.Keyboard.Key
   private upgradeElements: Phaser.GameObjects.GameObject[] = []
   private xpOrbValue: number = 10
   private theme!: MapTheme
+
+  // 磁铁光环
+  private magnetActive: boolean = false
+  private magnetTimer: number = 0
+  private magnetRadius: number = 100
+  private magnetGraphics!: Phaser.GameObjects.Graphics
 
   private boss!: Phaser.Physics.Arcade.Sprite | null
   private bossHP: number = 0
@@ -77,6 +87,10 @@ export class GameScene extends Phaser.Scene {
 
   private soundManager!: SoundManager
   private damageOverlay!: Phaser.GameObjects.Graphics
+  private bossDead: boolean = false
+  private barrierRadius: number = 80
+  private barrierDamage: number = 5
+  private barrierGraphics!: Phaser.GameObjects.Graphics
 
   constructor() {
     super("GameScene")
@@ -92,6 +106,7 @@ export class GameScene extends Phaser.Scene {
     this.invincible = false
     this.weaponIdx = 0
     this.weaponTimer = 0
+    Logger.log("system", "GameScene create()")
     this.isDodging = false
     this.dodgeTimer = 0
     this.dodgeCooldownTimer = 0
@@ -115,15 +130,17 @@ export class GameScene extends Phaser.Scene {
     this.bossMaxHP = 0
     this.bossPhase = 0
     this.bossAttackTimer = 0
+    this.bossDead = false
+    this.magnetActive = false
+    this.magnetTimer = 0
 
     if (this.initWeaponId) {
-      const idx = WEAPON_LIST.findIndex((w) => w.id === this.initWeaponId)
-      if (idx >= 0) this.weaponIdx = idx
+      const initWeapon = WEAPON_LIST.find(w => w.id === this.initWeaponId)
+      this.weaponSlots[0] = initWeapon || WEAPON_LIST[0]
+    } else {
+      this.weaponSlots[0] = WEAPON_LIST[0]
     }
-
-    // 初始化武器槽位：slot 0 = 初始武器
-    const initWeapon = WEAPON_LIST.find(w => w.id === this.initWeaponId)
-    this.weaponSlots[0] = initWeapon || WEAPON_LIST[0]
+    this.weaponIdx = 0
 
     const talSave = loadSave()
     const talBonus = computeBonuses(getActiveSlot(talSave))
@@ -156,6 +173,8 @@ export class GameScene extends Phaser.Scene {
     this.setupCollisions()
     this.setupCamera()
     this.createDamageOverlay()
+    this.createBarrier()
+    this.createMagnetGraphics()
 
     this.time.delayedCall(1500, () => this.startNextWave())
   }
@@ -238,6 +257,8 @@ export class GameScene extends Phaser.Scene {
   }
 
   private spawnBoss() {
+    this.bossDead = false  // 重置死亡标记，允许新 Boss 被击杀
+    Logger.log("boss", "spawnBoss() — wave", this.waveNumber, "HP:", BOSS_DEF.baseHp + this.waveNumber * BOSS_DEF.hpScalePerWave)
     this.soundManager.playSFX(SoundKey.BOSS_APPEAR)
     // Clear regular enemies
     this.enemies.getChildren().forEach(e => {
@@ -441,6 +462,69 @@ export class GameScene extends Phaser.Scene {
     this.damageOverlay.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT)
   }
 
+  private createBarrier() {
+    this.barrierGraphics = this.add.graphics().setDepth(9)
+  }
+
+  private createMagnetGraphics() {
+    this.magnetGraphics = this.add.graphics().setDepth(10)
+  }
+
+  private updateBarrier() {
+    this.barrierGraphics.clear()
+    const px = this.player.x
+    const py = this.player.y
+    const r = this.barrierRadius
+
+    // 外圈光晕
+    this.barrierGraphics.lineStyle(3, 0x44aaff, 0.4)
+    this.barrierGraphics.strokeCircle(px, py, r)
+    // 内圈
+    this.barrierGraphics.lineStyle(1, 0x88ccff, 0.2)
+    this.barrierGraphics.strokeCircle(px, py, r * 0.7)
+    // 半透明填充
+    this.barrierGraphics.fillStyle(0x4488ff, 0.06)
+    this.barrierGraphics.fillCircle(px, py, r)
+  }
+
+  private applyBarrierEffects() {
+    const px = this.player.x
+    const py = this.player.y
+    const r = this.barrierRadius
+    const dmgPerTick = this.barrierDamage / 60  // 每帧伤害
+
+    this.enemies.getChildren().forEach((e) => {
+      const enemy = e as Phaser.Physics.Arcade.Sprite
+      if (!enemy.active) return
+      // 先清除屏障标记
+      enemy.setData("barrierSlow", 0)
+      const dist = Phaser.Math.Distance.Between(px, py, enemy.x, enemy.y)
+      if (dist <= r) {
+        // 减速标记
+        enemy.setData("barrierSlow", 50)
+        // 蓝色 tint
+        enemy.setTint(0x4488ff)
+
+        // Boss 特殊处理
+        if (enemy.getData("isBoss")) {
+          this.bossHP -= dmgPerTick * 20
+          if (this.bossHP <= 0) this.bossDeath()
+          return
+        }
+
+        // 普通敌人：伤害 + 死亡检测
+        const hp = enemy.getData("hp") as number
+        enemy.setData("hp", hp - dmgPerTick)
+        if (hp - dmgPerTick <= 0) {
+          const enemyType = enemy.getData("type") as string | undefined
+          this.spawnDeathEffect(enemy.x, enemy.y, enemyType)
+          this.onEnemyKilled(enemy.x, enemy.y, enemyType)
+          enemy.destroy()
+        }
+      }
+    })
+  }
+
   private flashDamageOverlay() {
     this.tweens.killTweensOf(this.damageOverlay)
     this.damageOverlay.clear()
@@ -470,11 +554,15 @@ export class GameScene extends Phaser.Scene {
     this.updateBossAI(_time, delta)
     if (this.boss && this.boss.active) this.updateBossHPBar()
     this.updateHomingBullets()
+    this.updateLaserBullets()
     this.updateHPBar()
     this.cleanupBullets()
     this.updateHUD()
     this.checkWave()
     this.magnetXP(delta)
+    this.updateMagnet(delta)
+    this.updateBarrier()
+    this.applyBarrierEffects()
   }
 
   private handleWeaponSwitch() {
@@ -483,6 +571,7 @@ export class GameScene extends Phaser.Scene {
     for (let i = 0; i < 3; i++) {
       if (Phaser.Input.Keyboard.JustDown(keys[i]) && this.weaponSlots[i]) {
         if (this.weaponIdx !== i) {
+          Logger.log("weapon", "switch — slot", i, "→", this.weaponSlots[i]!.name)
           this.weaponIdx = i
           this.weaponTimer = 0
           this.updateHUD()
@@ -654,12 +743,12 @@ export class GameScene extends Phaser.Scene {
       const angle = Phaser.Math.Angle.Between(enemy.x, enemy.y, this.player.x, this.player.y)
       const dist = Phaser.Math.Distance.Between(enemy.x, enemy.y, this.player.x, this.player.y)
       const body = enemy.body as Phaser.Physics.Arcade.Body
-      enemy.setRotation(angle - Math.PI / 2)
+      enemy.setRotation(angle)
 
       // 冰冻减速处理
       const slowTimer = enemy.getData("slowTimer") as number | undefined
       if (slowTimer && slowTimer > 0) {
-        enemy.setData("slowTimer", slowTimer - 16.67)
+        enemy.setData("slowTimer", slowTimer - GAMEPLAY.FRAME_MS)
       }
 
       const type = enemy.getData("type") as string | undefined
@@ -668,14 +757,14 @@ export class GameScene extends Phaser.Scene {
         const attackRange = def.attackRange || 150
         let shootTimer = enemy.getData("shootTimer") as number | undefined
         if (shootTimer === undefined) shootTimer = 0  // 立即射击，而不是冷却值
-        const cooldown = Math.max(500, (def.shootCooldown || 1500) - this.waveNumber * 20)
+        const cooldown = Math.max(500, (def.shootCooldown || GAMEPLAY.ENEMY_SHOOT_COOLDOWN_BASE) - this.waveNumber * 20)
 
         if (dist > attackRange) {
           body.setVelocity(Math.cos(angle) * (def.baseSpeed + this.waveNumber * 2),
             Math.sin(angle) * (def.baseSpeed + this.waveNumber * 2))
         } else {
           body.setVelocity(0, 0)
-          shootTimer -= 16.67
+          shootTimer -= GAMEPLAY.FRAME_MS
           if (shootTimer <= 0) {
             shootTimer = cooldown
             const bullet = this.enemyBullets.get(enemy.x, enemy.y, "bullet_enemy") as Phaser.Physics.Arcade.Sprite | null
@@ -705,7 +794,7 @@ export class GameScene extends Phaser.Scene {
         // Elite: summon chargers every 5s (max 8 total)
         let summonTimer = enemy.getData("summonTimer") as number | undefined
         if (summonTimer === undefined) summonTimer = 5000
-        summonTimer -= 16.67
+        summonTimer -= GAMEPLAY.FRAME_MS
         if (summonTimer <= 0) {
           summonTimer = 5000
           let currentSummonCount = enemy.getData("summonCount") as number | undefined
@@ -726,10 +815,17 @@ export class GameScene extends Phaser.Scene {
         body.setVelocity(Math.cos(angle) * eSpeed, Math.sin(angle) * eSpeed)
       }
 
-      // 减速效果
-      if (enemy.getData("slowTimer") as number > 0) {
-        body.setVelocity(body.velocity.x * 0.5, body.velocity.y * 0.5)
-        enemy.setTint(0x88ccff)
+      // 减速效果（冰冻 + 屏障）
+      const freezeActive = (enemy.getData("slowTimer") as number) > 0
+      const barrierActive = (enemy.getData("barrierSlow") as number) > 0
+      if (freezeActive || barrierActive) {
+        const slowFactor = freezeActive ? 0.5 : 0.7
+        body.setVelocity(body.velocity.x * slowFactor, body.velocity.y * slowFactor)
+      }
+      if (freezeActive) {
+        enemy.setTint(0x88ccff) // 冰冻蓝色 tint
+      } else if (barrierActive) {
+        enemy.setTint(0x4488ff) // 屏障蓝色 tint
       } else {
         enemy.clearTint()
       }
@@ -741,7 +837,7 @@ export class GameScene extends Phaser.Scene {
     const boss = this.boss
     const body = boss.body as Phaser.Physics.Arcade.Body
     const angle = Phaser.Math.Angle.Between(boss.x, boss.y, this.player.x, this.player.y)
-    boss.setRotation(angle - Math.PI / 2)
+    boss.setRotation(angle)
 
     // Determine phase based on HP ratio
     const ratio = this.bossHP / this.bossMaxHP
@@ -752,6 +848,7 @@ export class GameScene extends Phaser.Scene {
 
     // Phase transition visual feedback
     if (newPhase !== this.bossPhase) {
+      Logger.log("boss", "Phase transition —", newPhase, "HP ratio:", ratio.toFixed(3))
       this.bossPhase = newPhase
       this.soundManager.playSFX(SoundKey.BOSS_PHASE)
       this.flashSprite(boss)
@@ -798,7 +895,7 @@ export class GameScene extends Phaser.Scene {
     switch (phase) {
       case 0: return 1800
       case 1: return 1200
-      case 2: return 250
+      case 2: return GAMEPLAY.BOSS_ATTACK_INTERVAL_PHASE2
       default: return 1800
     }
   }
@@ -918,6 +1015,17 @@ export class GameScene extends Phaser.Scene {
     const bullet = bulletObj as Phaser.Physics.Arcade.Sprite
     const enemy = enemyObj as Phaser.Physics.Arcade.Sprite
 
+    // 日志：子弹命中
+    Logger.log("bullet", "onBulletHitEnemy() — isCannon:",
+      !!bullet.getData("isCannon"), "isFreeze:", !!bullet.getData("isFreeze"),
+      "isGrenade:", !!bullet.getData("isGrenade"), "isBoss:", !!enemy.getData("isBoss"),
+      "bossDead:", this.bossDead, "enemy.active:", enemy.active)
+    if (!enemy.active) {
+      bullet.setActive(false).setVisible(false)
+      if (bullet.body) (bullet.body as Phaser.Physics.Arcade.Body).enable = false
+      return
+    }
+
     // 能量炮穿透 — 不销毁子弹
     if (bullet.getData("isCannon")) {
       const dmg = bullet.getData("damage") as number
@@ -930,7 +1038,7 @@ export class GameScene extends Phaser.Scene {
         enemy.setData("hp", hp - dmg)
         if (hp - dmg <= 0) {
           this.spawnDeathEffect(enemy.x, enemy.y, enemy.getData("type"))
-          this.onEnemyKilled(enemy.x, enemy.y)
+          this.onEnemyKilled(enemy.x, enemy.y, enemy.getData("type"))
           enemy.destroy()
         } else {
           this.flashSprite(enemy)
@@ -949,7 +1057,7 @@ export class GameScene extends Phaser.Scene {
     // 榴弹 — 爆炸范围伤害
     if (bullet.getData("isGrenade")) {
       const dmg = bullet.getData("damage") as number
-      const explosion = this.add.circle(bullet.x, bullet.y, 40, 0xff8800, 0.3).setDepth(15)
+      const explosion = this.add.circle(bullet.x, bullet.y, GAMEPLAY.GRENADE_RADIUS, 0xff8800, 0.3).setDepth(15)
       this.tweens.add({
         targets: explosion, alpha: 0, scale: 1.5, duration: 300,
         onComplete: () => explosion.destroy(),
@@ -958,7 +1066,7 @@ export class GameScene extends Phaser.Scene {
         const aoeEnemy = e as Phaser.Physics.Arcade.Sprite
         if (!aoeEnemy.active) return
         const dist = Phaser.Math.Distance.Between(bullet.x, bullet.y, aoeEnemy.x, aoeEnemy.y)
-        if (dist < 40) {
+        if (dist < GAMEPLAY.GRENADE_RADIUS) {
           if (aoeEnemy.getData("isBoss")) {
             this.bossHP -= dmg
             this.flashSprite(aoeEnemy)
@@ -968,7 +1076,7 @@ export class GameScene extends Phaser.Scene {
             aoeEnemy.setData("hp", hp - dmg)
             if (hp - dmg <= 0) {
               this.spawnDeathEffect(aoeEnemy.x, aoeEnemy.y, aoeEnemy.getData("type"))
-              this.onEnemyKilled(aoeEnemy.x, aoeEnemy.y)
+              this.onEnemyKilled(aoeEnemy.x, aoeEnemy.y, aoeEnemy.getData("type"))
               aoeEnemy.destroy()
             } else {
               this.flashSprite(aoeEnemy)
@@ -976,6 +1084,7 @@ export class GameScene extends Phaser.Scene {
           }
         }
       })
+      return
     }
 
     // Normal bullet deactivation
@@ -1018,9 +1127,9 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
-  private onEnemyKilled(x: number, y: number) {
+  private onEnemyKilled(x: number, y: number, type?: string) {
     this.soundManager.playSFX(SoundKey.KILL_ENEMY)
-    this.tryDropItem(x, y)
+    this.tryDropItem(x, y, type)
     this.spawnXPOrb(x, y)
   }
 
@@ -1095,18 +1204,63 @@ export class GameScene extends Phaser.Scene {
       const weaponId = pickup.getData("weaponDrop") as WeaponId
       const weapon = WEAPON_LIST.find(w => w.id === weaponId)
       if (weapon) {
+        const isDuplicate = pickup.getData("isDuplicate") as boolean
+        if (isDuplicate) {
+          // 重复 Boss 武器：获得伤害倍率加成（+50%），不替换槽位
+          this.damageMult += 0.5
+          this.showFloatingText(pickup.x, pickup.y, weapon.name + " +50% 伤害!")
+          pickup.destroy()
+          Logger.log("weapon", "pickup (duplicate) —", weapon.name, "+50% damage")
+          return
+        }
         let slot = -1
         for (let i = 1; i < 3; i++) {
           if (!this.weaponSlots[i]) { slot = i; break }
         }
-        if (slot === -1) slot = this.weaponIdx
-        this.weaponSlots[slot] = weapon
-        this.updateHUD()
+        if (slot >= 0) {
+          // 有空槽 → 直接拾取
+          this.weaponSlots[slot] = weapon
+          this.weaponIdx = slot
+          this.weaponTimer = 0
+          this.updateHUD()
+          Logger.log("weapon", "pickup —", weapon.name, "→ slot", slot)
+          this.showFloatingText(pickup.x, pickup.y, weapon.name)
+          pickup.destroy()
+        } else {
+          // 满槽 → 按键选择替换
+          const hint = this.add.text(pickup.x, pickup.y - 20, "按 1/2/3 替换武器", {
+            fontSize: "11px", color: "#4fc3f7", fontFamily: "monospace",
+          }).setOrigin(0.5).setDepth(20)
+          this.tweens.add({ targets: hint, alpha: 0, duration: 2000, onComplete: () => hint.destroy() })
+
+          const onKey = (i: number) => {
+            this.weaponSlots[i] = weapon
+            this.weaponIdx = i
+            this.weaponTimer = 0
+            this.updateHUD()
+            Logger.log("weapon", "pickup (replace) —", weapon.name, "→ slot", i)
+            this.showFloatingText(pickup.x, pickup.y, weapon.name + "!")
+            hint.destroy()
+            pickup.destroy()
+          }
+          this.key1.once("down", () => onKey(0))
+          this.key2.once("down", () => onKey(1))
+          this.key3.once("down", () => onKey(2))
+          // 超时回退：5 秒后丢弃 pickup
+          this.time.delayedCall(5000, () => {
+            if (hint.active) hint.destroy()
+            if (pickup.active) pickup.destroy()
+          })
+        }
       }
     }
 
-    this.showFloatingText(pickup.x, pickup.y, pickup.getData("pickupText") || "")
-    pickup.destroy()
+    // 磁铁道具：激活 10 秒被动光环
+    if (itemId === "magnet") {
+      this.activateMagnet()
+      pickup.destroy()
+      return
+    }
   }
 
   private addXP(amount: number) {
@@ -1137,13 +1291,28 @@ export class GameScene extends Phaser.Scene {
 
   private magnetXP(_delta: number) {
     const px = this.player.x; const py = this.player.y
+
     this.pickups.getChildren().forEach((p) => {
       const sprite = p as Phaser.Physics.Arcade.Sprite
-      if (!sprite.active || sprite.getData("itemId") !== "xp_orb") return
-      if (Phaser.Math.Distance.Between(sprite.x, sprite.y, px, py) > 80) return
-      const angle = Phaser.Math.Angle.Between(sprite.x, sprite.y, px, py)
-      const body = sprite.body as Phaser.Physics.Arcade.Body
-      body.setVelocity(Math.cos(angle) * 300, Math.sin(angle) * 300)
+      if (!sprite.active) return
+      const itemId = sprite.getData("itemId") as string
+
+      if (this.magnetActive) {
+        // 磁铁模式：吸取范围内所有 XP orb 和金币
+        if (itemId !== "xp_orb" && itemId !== "gold_coin") return
+        const dist = Phaser.Math.Distance.Between(sprite.x, sprite.y, px, py)
+        if (dist > this.magnetRadius) return
+        const angle = Phaser.Math.Angle.Between(sprite.x, sprite.y, px, py)
+        const body = sprite.body as Phaser.Physics.Arcade.Body
+        body.setVelocity(Math.cos(angle) * 300, Math.sin(angle) * 300)
+      } else {
+        // 默认模式：仅吸取 XP orb
+        if (itemId !== "xp_orb") return
+        if (Phaser.Math.Distance.Between(sprite.x, sprite.y, px, py) > 80) return
+        const angle = Phaser.Math.Angle.Between(sprite.x, sprite.y, px, py)
+        const body = sprite.body as Phaser.Physics.Arcade.Body
+        body.setVelocity(Math.cos(angle) * 300, Math.sin(angle) * 300)
+      }
     })
   }
 
@@ -1154,7 +1323,39 @@ export class GameScene extends Phaser.Scene {
     this.tweens.add({ targets: text, y: text.y - 20, alpha: 0, duration: 600, onComplete: () => text.destroy() })
   }
 
-  private tryDropItem(x: number, y: number) {
+  private activateMagnet() {
+    if (this.magnetActive) return
+    this.magnetActive = true
+    this.magnetTimer = 10000 // 10 秒
+    this.showFloatingText(this.player.x, this.player.y - 20, "磁铁光环激活!")
+    this.soundManager.playSFX(SoundKey.LEVEL_UP)
+  }
+
+  private updateMagnet(delta: number) {
+    if (!this.magnetActive) return
+    this.magnetTimer -= delta
+    if (this.magnetTimer <= 0) {
+      this.magnetActive = false
+      this.magnetTimer = 0
+      this.showFloatingText(this.player.x, this.player.y - 20, "磁铁光环失效")
+      return
+    }
+    // 视觉反馈：在玩家周围绘制光环
+    const px = this.player.x
+    const py = this.player.y
+    const r = this.magnetRadius
+    this.magnetGraphics.lineStyle(2, 0xffd700, 0.3)
+    this.magnetGraphics.strokeCircle(px, py, r)
+    this.magnetGraphics.fillStyle(0xffd700, 0.03)
+    this.magnetGraphics.fillCircle(px, py, r)
+  }
+
+  private tryDropItem(x: number, y: number, type?: string) {
+    // 精英怪有 2% 概率掉落磁铁
+    if (type === EnemyType.ELITE && Math.random() < 0.02) {
+      this.spawnPickup(x, y, ITEM_DEFS.magnet)
+      return
+    }
     if (Math.random() < 0.35) this.spawnPickup(x, y, ITEM_DEFS.gold_coin)
     else if (Math.random() < 0.12) this.spawnPickup(x, y, ITEM_DEFS.health_small)
   }
@@ -1248,9 +1449,9 @@ export class GameScene extends Phaser.Scene {
     })
 
     // Keyboard shortcuts: A / S / D for options 0 / 1 / 2
-    const keyA = this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.A)
-    const keyS = this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.S)
-    const keyD = this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.D)
+    this.upgradeKeyA = this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.A)
+    this.upgradeKeyS = this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.S)
+    this.upgradeKeyD = this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.D)
 
     const onKey = (i: number) => {
       if (options[i]) {
@@ -1258,10 +1459,9 @@ export class GameScene extends Phaser.Scene {
         this.destroyUpgradeUI()
       }
     }
-    keyA.once("down", () => onKey(0))
-    keyS.once("down", () => onKey(1))
-    keyD.once("down", () => onKey(2))
-    this.upgradeElements.push({ destroy: () => { keyA.removeAllListeners(); keyS.removeAllListeners(); keyD.removeAllListeners() } } as any)
+    this.upgradeKeyA.once("down", () => onKey(0))
+    this.upgradeKeyS.once("down", () => onKey(1))
+    this.upgradeKeyD.once("down", () => onKey(2))
   }
 
   private drawCardBg(g: Phaser.GameObjects.Graphics, cx: number, cy: number, hover: boolean) {
@@ -1282,6 +1482,10 @@ export class GameScene extends Phaser.Scene {
     this.upgradeElements.forEach((e) => e.destroy())
     this.upgradeElements = []
     this.upgradeActive = false
+    // Clean up upgrade keyboard listeners
+    this.upgradeKeyA?.off("down")
+    this.upgradeKeyS?.off("down")
+    this.upgradeKeyD?.off("down")
     this.physics.resume()
   }
 
@@ -1297,6 +1501,8 @@ export class GameScene extends Phaser.Scene {
       case "speed": this.speedMult += 0.1; break
       case "proj_speed": this.projSpeedMult += 0.25; break
       case "pellets": this.extraPellets += 1; break
+      case "barrier_range": this.barrierRadius += 30; break
+      case "barrier_damage": this.barrierDamage += 5; break
     }
     this.showFloatingText(this.player.x, this.player.y - 20, this.getUpgradeName(id))
   }
@@ -1305,6 +1511,7 @@ export class GameScene extends Phaser.Scene {
     const m: Record<string, string> = {
       damage: "攻击强化!", fire_rate: "速射!", max_hp: "生命强化!",
       speed: "迅捷!", proj_speed: "弹道加速!", pellets: "散射!",
+      barrier_range: "屏障扩展!", barrier_damage: "屏障强化!",
     }
     return m[id] || ""
   }
@@ -1339,7 +1546,10 @@ export class GameScene extends Phaser.Scene {
 
   private updateHUD() {
     for (let i = 0; i < this.uiWeaponLabels.length; i++) {
-      const hasWeapon = !!this.weaponSlots[i]
+      const w = this.weaponSlots[i]
+      const hasWeapon = !!w
+      // 更新武器名称文字（拾取后从"空"变为武器名）
+      this.uiWeaponLabels[i].setText(w ? `${i + 1} ${w.name}` : `${i + 1} 空`)
       if (i === this.weaponIdx) {
         this.uiWeaponLabels[i].setColor("#4fc3f7")
       } else if (hasWeapon) {
@@ -1407,24 +1617,59 @@ export class GameScene extends Phaser.Scene {
     })
   }
 
+  private updateLaserBullets() {
+    let nearestEnemy: Phaser.Physics.Arcade.Sprite | null = null
+    let nearestDist = Infinity
+    this.enemies.getChildren().forEach((e) => {
+      const enemy = e as Phaser.Physics.Arcade.Sprite
+      if (!enemy.active) return
+      const d = Phaser.Math.Distance.Between(this.player.x, this.player.y, enemy.x, enemy.y)
+      if (d < nearestDist) { nearestDist = d; nearestEnemy = enemy }
+    })
+    if (!nearestEnemy) return
+
+    this.bullets.getChildren().forEach((b) => {
+      const bullet = b as Phaser.Physics.Arcade.Sprite
+      if (!bullet.active || !bullet.getData("isLaser")) return
+      const a = Phaser.Math.Angle.Between(bullet.x, bullet.y, nearestEnemy!.x, nearestEnemy!.y)
+      const body = bullet.body as Phaser.Physics.Arcade.Body
+      const vx = body.velocity.x
+      const vy = body.velocity.y
+      const currentAngle = Math.atan2(vy, vx)
+      const newAngle = Phaser.Math.Angle.RotateTo(currentAngle, a, 0.1)
+      const speed = Math.sqrt(vx * vx + vy * vy)
+      body.setVelocity(Math.cos(newAngle) * speed, Math.sin(newAngle) * speed)
+    })
+  }
+
   private bossDeath() {
-    if (!this.boss) return
+    if (!this.boss || this.bossDead) {
+      Logger.warn("boss", "bossDeath() skipped — already dead or null, bossDead=", this.bossDead)
+      return
+    }
+    this.bossDead = true
+    Logger.log("boss", "bossDeath() — wave", this.waveNumber, "bossHP was", this.bossHP)
     this.soundManager.playSFX(SoundKey.BOSS_DEATH)
+    // 保存 Boss 位置（销毁后 this.boss 就没了）
+    const bossX = this.boss.x
+    const bossY = this.boss.y
     const centerX = this.cameras.main.centerX
     const centerY = this.cameras.main.centerY
 
-    this.spawnDeathEffect(this.boss.x, this.boss.y, "boss")
+    this.spawnDeathEffect(bossX, bossY, "boss")
     this.boss.destroy()
     this.boss = null
     this.waveActive = false
 
-    // Clean all enemy bullets
-    this.enemyBullets.getChildren().forEach((b) => {
-      const bullet = b as Phaser.Physics.Arcade.Sprite
-      if (bullet.active) {
-        bullet.active = false
-        bullet.visible = false
-      }
+    // Clean all enemy bullets（延迟到下一帧）
+    this.time.delayedCall(0, () => {
+      this.enemyBullets.getChildren().forEach((b) => {
+        const bullet = b as Phaser.Physics.Arcade.Sprite
+        if (bullet.active) {
+          bullet.active = false
+          bullet.visible = false
+        }
+      })
     })
 
     // Hide boss HP bar
@@ -1436,8 +1681,8 @@ export class GameScene extends Phaser.Scene {
     const crystalsReward = this.waveNumber * 10
     const goldReward = this.waveNumber * 5
     this.gold += goldReward
-    // Boss 武器掉落
-    this.spawnBossWeaponDrop(centerX, centerY + 40)
+    // Boss 武器掉落（在 Boss 位置生成，延迟到下一帧避免物理回调冲突）
+    this.time.delayedCall(0, () => this.spawnBossWeaponDrop(bossX, bossY))
 
     this.showWaveText("BOSS DEFEATED!")
     this.cameras.main.shake(800, 0.03)
@@ -1461,6 +1706,14 @@ export class GameScene extends Phaser.Scene {
     } else {
       dropWeapon = bossWeapons[Phaser.Math.Between(0, bossWeapons.length - 1)]
     }
+    if (existingBossWeapons.includes(dropWeapon.id)) {
+      // 重复武器：不替换槽位，改为获得伤害倍率加成
+      pickup.setData("isDuplicate", true)
+      Logger.log("boss", "spawnBossWeaponDrop() — duplicate weapon:", dropWeapon.name, "→ +50% damage")
+    } else {
+      pickup.setData("isDuplicate", false)
+    }
+    Logger.log("boss", "spawnBossWeaponDrop() — weapon:", dropWeapon.name)
 
     const pickup = this.physics.add.sprite(x, y, "weapon_pickup") as Phaser.Physics.Arcade.Sprite
     pickup.setDepth(15)
@@ -1616,6 +1869,9 @@ export class GameScene extends Phaser.Scene {
 
   shutdown() {
     this.soundManager?.destroy()
+    // Reset magnet state
+    this.magnetActive = false
+    this.magnetTimer = 0
     // Clean up enemy bullets
     this.enemyBullets.getChildren().forEach((b) => {
       const bullet = b as Phaser.Physics.Arcade.Sprite

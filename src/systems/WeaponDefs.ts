@@ -58,10 +58,6 @@ export const WEAPON_DEFS: Record<WeaponId, WeaponDef> = {
   },
 }
 
-export const WEAPON_LIST: WeaponDef[] = [
-  WEAPON_DEFS[WeaponId.PISTOL],
-  WEAPON_DEFS[WeaponId.SHOTGUN],
-  WEAPON_DEFS[WeaponId.SMG],
-]
+export const WEAPON_LIST: WeaponDef[] = Object.values(WEAPON_DEFS)
 
 export const BASE_WEAPON_LIST: WeaponDef[] = Object.values(WEAPON_DEFS).filter(w => !w.isBossWeapon)
