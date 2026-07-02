@@ -22,17 +22,17 @@ npm run pack             # Build Electron portable (x64 only)
 
 ### Scene Flow (Phaser)
 
-The game uses a linear scene pipeline defined in [main.ts](src/main.ts):
+The game uses a linear scene pipeline defined in [src/main.ts](src/main.ts). Scene classes live in [src/scenes/](src/scenes/), not under `systems/`.
 
 ```
 BootScene → MapSelectScene → WeaponSelectScene → TalentScene → GameScene
 ```
 
-- **BootScene** — Generates all textures procedurally (tilesets, bullets, items, UI, boss weapon sprites) via `Graphics.generateTexture()`. Preloads assets and audio. No external image files for gameplay elements — everything is drawn at runtime.
+- **BootScene** — [src/scenes/BootScene.ts](src/scenes/BootScene.ts) (~280 lines) generates tilesets, bullets, items, UI, boss weapon sprites, and enemy bullets at runtime via `Graphics.generateTexture()`. Also loads real bitmap assets (`assets/player.png`, `assets/weapon_*.png`, `assets/enemies/*.png`, `assets/audio/*.wav`) and audio via SoundManager. Transition: `this.scene.start("MapSelectScene")`.
 - **MapSelectScene** — Map theme selection screen.
 - **WeaponSelectScene** — Starting weapon selection.
-- **TalentScene** — Talent tree / meta-progression screen (persists via localStorage).
-- **GameScene** — Main gameplay. The largest file (~1800 lines) containing player movement, shooting, enemy AI, boss AI, collision, XP/leveling, wave management, and HUD.
+- **TalentScene** — Meta-progression talent tree; 3-slot save via `localStorage` (key `roguelike_save`) — see [TalentDefs.ts](src/systems/TalentDefs.ts) for `SaveData`/`SaveSlot` shape and the `loadSave`/`saveSave` helpers.
+- **GameScene** — [src/scenes/GameScene.ts](src/scenes/GameScene.ts) (~1800 lines, 74 KB) is the largest file. Contains player movement, shooting, enemy AI, boss AI, collision, XP/leveling, wave management, and HUD.
 
 ### Core Systems (`src/systems/`)
 
@@ -40,17 +40,37 @@ BootScene → MapSelectScene → WeaponSelectScene → TalentScene → GameScene
 |------|---------|
 | [EnemyDefs.ts](src/systems/EnemyDefs.ts) | Enemy type definitions (Charger, Shooter, Elite) with stats |
 | [BossDefs.ts](src/systems/BossDefs.ts) | Boss phase definitions, attack patterns, HP scaling |
-| [WeaponDefs.ts](src/systems/WeaponDefs.ts) | 3-slot weapon system — standard + boss weapons (laser, grenade, freeze, cannon) |
+| [WeaponDefs.ts](src/systems/WeaponDefs.ts) | Weapon registry (`WEAPON_DEFS`, `WeaponId` enum). Base weapons: pistol/shotgun/smg. Boss weapons: laser/grenade/freeze/minigun/cannon (flagged `isBossWeapon`, with `special` tag). `BASE_WEAPON_LIST` filters out boss weapons for the starting-pool UI. |
 | [ItemDefs.ts](src/systems/ItemDefs.ts) | Pickup item definitions (gold, health, XP, magnet) |
 | [UpgradeDefs.ts](src/systems/UpgradeDefs.ts) | Level-up upgrade options (damage, fire rate, HP, speed, pellets, barrier) |
-| [TalentDefs.ts](src/systems/TalentDefs.ts) | Meta-progression talent tree with localStorage persistence |
-| [MapThemes.ts](src/systems/MapThemes.ts) | Map theme color palettes (used for procedural tileset generation) |
+| [TalentDefs.ts](src/systems/TalentDefs.ts) | Meta-progression talent tree, save-slot helpers (`loadSave`/`saveSave`/`computeBonuses`), localStorage key `roguelike_save` |
+| [MapThemes.ts](src/systems/MapThemes.ts) | Map theme color palettes consumed by BootScene's `generateTileset` |
 | [SoundManager.ts](src/systems/SoundManager.ts) | SFX and BGM management with fade-in/out |
 | [Debug.ts](src/systems/Debug.ts) | Logger utility for in-game debug output |
 
 ### Map (`src/map/`)
 
 - [types.ts](src/map/types.ts) — Tile type enum (WALL, FLOOR, CORRIDOR), map dimensions (MAP_WIDTH, MAP_HEIGHT)
+
+### Persistence
+
+- Single localStorage key `roguelike_save` ([TalentDefs.ts](src/systems/TalentDefs.ts)) holds up to 3 save slots: `{ activeSlot, slots: [{ id, name, crystals, talents, lastSave }] }`. `computeBonuses(slot)` flattens talent levels into `TalentBonuses` consumed by `GameScene`.
+- Crystals are awarded on death, proportional to waves survived.
+
+### Electron Wrapper (`electron/`)
+
+[electron/main.cjs](electron/main.cjs) creates a `BrowserWindow` (1280×860, min 640×360, resizable, fullscreenable, autoHideMenuBar, `contextIsolation: true`, `nodeIntegration: false`) loading `dist/index.html`. Pass `--dev` on the command line to auto-open DevTools — wired via `process.argv.includes("--dev")`.
+
+### Other Top-Level Paths
+
+- `adb-gui/` — standalone sibling Electron + Vite + React + Tailwind subproject (own `package.json`, `vite.config.ts`). Built independently; not part of the game's build pipeline. Its `.npm-cache/` is git-ignored.
+- `docs/superpowers/{plans,specs}/` — superpowers workflow artifacts (planning/spec scratchpads).
+- `.omo/` — omo agent state (boulder.json, drafts, plans, run-continuation).
+- `2D肉鸽游戏设计方案.md` — early design notes for the shell-hero game itself (Waves/boss/talent concept).
+
+### Sibling Projects (repo root)
+
+- `封锁区-游戏策划案.md` (repo root) — design doc for **《封锁区 / Blockade》**, a separate Godot 4.x 3D extraction-shooter (PvE / Tarkov-style). Not implemented; lives at repo root to keep it independent of the shell-hero subproject.
 
 ### Key Game Mechanics
 
@@ -65,11 +85,12 @@ BootScene → MapSelectScene → WeaponSelectScene → TalentScene → GameScene
 
 ### Configuration
 
-- [config.ts](src/config.ts) — Game constants: dimensions (1280×720), tile size (32), player stats, dodge params, color palette, gameplay timing
+- [config.ts](src/config.ts) — Game constants: dimensions (1280×720), tile size (32), player stats, dodge params, color palette, gameplay timing (frame ms, grenade radius, boss phase-2 attack interval, enemy shoot cooldown base)
 
 ### Build Setup
 
 - Vite with `@` alias pointing to `src/`
-- TypeScript 6, Phaser 3.80+
-- Electron packaging via electron-builder (Windows portable only)
-- All game textures are generated procedurally in BootScene — no sprite sheets
+- TypeScript 6, Phaser 3.80+, Arcade physics (no gravity), `pixelArt: true`, scale mode `FIT` with `CENTER_BOTH`
+- Electron packaging via electron-builder (Windows portable only, x64)
+- Most game textures are generated procedurally in BootScene; bitmap assets under `assets/` (player, weapons, enemies) and audio under `assets/audio/` are loaded alongside the procedural pipeline
+- **No test runner is configured** — `package.json` has no `test` script. Validation runs are limited to `npm run build` (tsc + vite build)

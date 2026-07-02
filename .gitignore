@@ -5,6 +5,9 @@ node_modules/
 dist/
 release/
 
+# npm cache (created inside adb-gui/)
+.npm-cache/
+
 # OS files
 .DS_Store
 Thumbs.db
