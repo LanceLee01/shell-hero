@@ -1648,6 +1648,11 @@ export class GameScene extends Phaser.Scene {
       return
     }
     this.bossDead = true
+    // 如果在 boss 战中升级导致升级 UI 卡住，先清理掉
+    if (this.upgradeActive) {
+      Logger.log("boss", "bossDeath() — clearing active upgrade UI before boss death")
+      this.destroyUpgradeUI()
+    }
     Logger.log("boss", "bossDeath() — wave", this.waveNumber, "bossHP was", this.bossHP)
     this.soundManager.playSFX(SoundKey.BOSS_DEATH)
     // 保存 Boss 位置（销毁后 this.boss 就没了）
@@ -1706,6 +1711,7 @@ export class GameScene extends Phaser.Scene {
     } else {
       dropWeapon = bossWeapons[Phaser.Math.Between(0, bossWeapons.length - 1)]
     }
+    const pickup = this.physics.add.sprite(x, y, "weapon_pickup") as Phaser.Physics.Arcade.Sprite
     if (existingBossWeapons.includes(dropWeapon.id)) {
       // 重复武器：不替换槽位，改为获得伤害倍率加成
       pickup.setData("isDuplicate", true)
@@ -1714,8 +1720,6 @@ export class GameScene extends Phaser.Scene {
       pickup.setData("isDuplicate", false)
     }
     Logger.log("boss", "spawnBossWeaponDrop() — weapon:", dropWeapon.name)
-
-    const pickup = this.physics.add.sprite(x, y, "weapon_pickup") as Phaser.Physics.Arcade.Sprite
     pickup.setDepth(15)
     pickup.setData("itemId", "boss_weapon")
     pickup.setData("weaponDrop", dropWeapon.id)
