@@ -20,5 +20,5 @@ export function getRandomUpgrades(count: number): UpgradeDef[] {
   return shuffled.slice(0, count)
 }
 
-export const XP_BASE = 30
+export const XP_BASE = 40
 export const XP_INCREMENT = 25
